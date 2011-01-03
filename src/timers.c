@@ -166,7 +166,6 @@ void timecb_cancel(timecb_t timer)
 void timecb_reschedule(timecb_t timer, unsigned long delay_ms)
 {
     struct timeval target;
-    assert(timer->prev != NULL || timer->next != NULL);
     gettimeofday(&target, NULL);
     timeval_add2(&target, delay_ms);
     timer->delay = delay_ms;
