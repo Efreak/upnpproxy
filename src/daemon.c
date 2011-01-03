@@ -1287,6 +1287,8 @@ static void daemon_server_incoming_cb(void* userdata, socket_t sock)
                        "Incoming data for server %s before connection done.",
                        tmp);
             free(tmp);
+            daemon_lost_server(daemon, server, true);
+            return;
         }
         return;
     }
@@ -1427,6 +1429,11 @@ static void daemon_server_accept_cb(void* userdata, socket_t sock)
             switch (daemon->server[i].state)
             {
             case CONN_DEAD:
+                if (daemon->server[i].reconnect_timecb != NULL)
+                {
+                    timecb_cancel(daemon->server[i].reconnect_timecb);
+                    daemon->server[i].reconnect_timecb = NULL;
+                }
                 daemon->server[i].state = CONN_CONNECTED;
                 daemon->server[i].sock = s;
                 selector_add(daemon->selector, daemon->server[i].sock,
