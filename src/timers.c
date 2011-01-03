@@ -159,7 +159,6 @@ unsigned long timers_tick(timers_t timers)
 
 void timecb_cancel(timecb_t timer)
 {
-    assert(timer->prev != NULL || timer->next != NULL);
     timecb_remove(timer);
     free(timer);
 }
