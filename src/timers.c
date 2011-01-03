@@ -18,8 +18,6 @@ struct _timecb_t
     unsigned long delay;
 };
 
-#include <stdio.h>
-
 timers_t timers_new(void)
 {
     return calloc(1, sizeof(struct _timers_t));
@@ -43,13 +41,10 @@ static void timecb_insert(timecb_t timer)
 {
     timers_t timers = timer->timers;
     timecb_t t = timers->first;
-    fprintf(stderr, "insert: %p %lu.%06lu (first: %p last: %p)\n", timer, timer->target.tv_sec, timer->target.tv_usec, timers->first, timers->last);
     if (t != NULL)
     {
-        fprintf(stderr, "first: %lu.%06lu\n", t->target.tv_sec, t->target.tv_usec);
         if (timeval_cmp(&(timer->target), &(t->target)) <= 0)
         {
-            fprintf(stderr, "=> insert first\n");
             timers->first = timer;
             timer->prev = NULL;
             timer->next = t;
@@ -59,16 +54,13 @@ static void timecb_insert(timecb_t timer)
     t = timers->last;
     if (t == NULL)
     {
-        fprintf(stderr, "=> insert first & last\n");
         timers->first = timers->last = timer;
         timer->prev = NULL;
         timer->next = NULL;
         return;
     }
-    fprintf(stderr, "last: %lu.%06lu\n", t->target.tv_sec, t->target.tv_usec);
     if (timeval_cmp(&(timer->target), &(t->target)) > 0)
     {
-        fprintf(stderr, "=> insert last\n");
         timers->last = timer;
         timer->prev = t;
         timer->next = NULL;
@@ -76,16 +68,14 @@ static void timecb_insert(timecb_t timer)
     }
     for (;;)
     {
-        t = t->prev;
-        fprintf(stderr, "t: %lu.%06lu\n", t->target.tv_sec, t->target.tv_usec);
         if (timeval_cmp(&(timer->target), &(t->target)) <= 0)
         {
-            fprintf(stderr, "=> insert\n");
             timer->prev = t->prev;
             timer->next = t;
             t->prev = timer;
             return;
         }
+        t = t->prev;
     }
 }
 
@@ -144,8 +134,6 @@ unsigned long timers_tick(timers_t timers)
             ret = t->callback(t->userdata);
             if (ret < 0)
             {
-                fprintf(stderr, "t->callback: %ld t: %p t->userdata: %p\n",
-                        ret, t, t->userdata);
                 free(t);
                 continue;
             }

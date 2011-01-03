@@ -578,11 +578,8 @@ static bool daemon_add_local(daemon_t daemon, ssdp_notify_t* notify)
     local.daemon = daemon;
     localptr = map_put(daemon->locals, &local);
     localptr->expirecb = timers_add(daemon->timers,
-                                    localptr->expires - now,
+                                    (localptr->expires - now) * 1000,
                                     localptr, daemon_localservice_expire);
-    log_printf(daemon->log, LVL_INFO,
-               "create local: %p expirecb: %p (location: %s)",
-               localptr, localptr->expirecb, localptr->location);
     return true;
 }
 
@@ -622,21 +619,16 @@ static void daemon_update_local(daemon_t daemon, localservice_t* local,
     if (local->expires != notify->expires)
     {
         local->expires = notify->expires;
-        log_printf(daemon->log, LVL_INFO,
-                   "update local: %p expirecb: %p (location: %s)",
-                   local, local->expirecb, local->location);
         if (local->expirecb != NULL)
         {
-            timecb_reschedule(local->expirecb, local->expires - time(NULL));
+            timecb_reschedule(local->expirecb,
+                              (local->expires - time(NULL)) * 1000);
         }
         else
         {
             local->expirecb = timers_add(local->daemon->timers,
-                                         local->expires - time(NULL),
+                                         (local->expires - time(NULL)) * 1000,
                                          local, daemon_localservice_expire);
-            log_printf(daemon->log, LVL_INFO,
-                       "update expirecb: %p",
-                       local->expirecb);
         }
     }
 }
@@ -1136,7 +1128,7 @@ static void daemon_add_remote(daemon_t daemon, server_t* server,
                  remoteservice_read_cb, NULL);
     ssdp_notify(daemon->ssdp, &(remoteptr->notify));
     remoteptr->touchcb = timers_add(daemon->timers,
-                                    REMOTE_EXPIRE_TTL - REMOTE_EXPIRE_BUFFER,
+                                    (REMOTE_EXPIRE_TTL - REMOTE_EXPIRE_BUFFER) * 1000,
                                     remoteptr,
                                     daemon_remoteservice_touch);
 }
@@ -1957,9 +1949,6 @@ void localservice_free(void* _local)
     localservice_t* local = _local;
     if (local->expirecb != NULL)
     {
-        log_printf(local->daemon->log, LVL_INFO,
-                   "cancel local: %p expirecb: %p (location: %s)",
-                   local, local->expirecb, local->location);
         timecb_cancel(local->expirecb);
         local->expirecb = NULL;
     }
@@ -2165,9 +2154,6 @@ static long daemon_remoteservice_touch(void* userdata)
 static long daemon_localservice_expire(void* userdata)
 {
     localservice_t* local = userdata;
-    log_printf(local->daemon->log, LVL_INFO,
-               "expire local: %p expirecb: %p (location: %s)",
-               local, local->expirecb, local->location);
     local->expirecb = NULL;
     map_remove(local->daemon->locals, local);
     return -1;
