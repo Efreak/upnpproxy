@@ -1254,16 +1254,42 @@ static void daemon_server_incoming_cb(void* userdata, socket_t sock)
     daemon_t daemon = server->daemon;
     size_t avail = 0;
     char* ptr;
-    bool first = false;
 
     switch (server->state)
     {
     case CONN_DEAD:
         return;
     case CONN_CONNECTING:
-        server->state = CONN_CONNECTED;
-        first = true;
-        break;
+    {
+        char tmp[1];
+        ssize_t got = socket_read(sock, tmp, 1);
+        if (got <= 0)
+        {
+            char* tmp;
+            if (socket_blockingerror(sock))
+            {
+                return;
+            }
+
+            asprinthost(&tmp, server->host, server->hostlen);
+            log_printf(daemon->log, LVL_WARN,
+                       "Unable to connect to server %s: %s",
+                       tmp, socket_strerror(sock));
+            free(tmp);
+            daemon_lost_server(daemon, server, true);
+            return;
+        }
+        else
+        {
+            char* tmp;
+            asprinthost(&tmp, server->host, server->hostlen);
+            log_printf(daemon->log, LVL_INFO,
+                       "Incoming data for server %s before connection done.",
+                       tmp);
+            free(tmp);
+        }
+        return;
+    }
     case CONN_CONNECTED:
         break;
     }
@@ -1280,24 +1306,12 @@ static void daemon_server_incoming_cb(void* userdata, socket_t sock)
                 return;
             }
 
-            if (first)
-            {
-                asprinthost(&tmp, server->host, server->hostlen);
-                log_printf(daemon->log, LVL_WARN,
-                           "Unable to connect to server %s: %s",
-                           tmp, socket_strerror(sock));
-                free(tmp);
-                daemon_lost_server(daemon, server, true);
-            }
-            else
-            {
-                asprinthost(&tmp, server->host, server->hostlen);
-                log_printf(daemon->log, LVL_WARN,
-                           "Lost connection with server %s: %s",
-                           tmp, socket_strerror(sock));
-                free(tmp);
-                daemon_lost_server(daemon, server, false);
-            }
+            asprinthost(&tmp, server->host, server->hostlen);
+            log_printf(daemon->log, LVL_WARN,
+                       "Lost connection with server %s: %s",
+                       tmp, socket_strerror(sock));
+            free(tmp);
+            daemon_lost_server(daemon, server, false);
             return;
         }
         buf_wmove(server->in, got);
@@ -1407,8 +1421,8 @@ static void daemon_server_accept_cb(void* userdata, socket_t sock)
     }
     for (i = 0; i < daemon->servers; ++i)
     {
-        if (daemon->server[i].hostlen == addrlen &&
-            memcmp(daemon->server[i].host, addr, addrlen) == 0)
+        if (socket_samehost(daemon->server[i].host, daemon->server[i].hostlen,
+                            addr, addrlen))
         {
             switch (daemon->server[i].state)
             {
@@ -1609,8 +1623,9 @@ bool load_config(daemon_t daemon)
             server_t* srv = daemon->server + (i - 1);
             for (j = server_cnt; j > 0; --j)
             {
-                if (srv->hostlen == server[j - 1].hostlen &&
-                    memcmp(srv->host, server[j - 1].host, srv->hostlen) == 0)
+                if (socket_samehostandport(srv->host, srv->hostlen,
+                                           server[j - 1].host,
+                                           server[j - 1].hostlen))
                 {
                     found = true;
                     server_free2(server + (j - 1));

@@ -622,4 +622,37 @@ struct sockaddr* socket_getsockaddr(socket_t sock, socklen_t *addrlen)
     return addr;
 }
 
+bool socket_samehost(const struct sockaddr* a1, socklen_t a1len,
+                     const struct sockaddr* a2, socklen_t a2len)
+{
+    if (a1len != a2len || a1->sa_family != a2->sa_family)
+    {
+        return false;
+    }
+
+    if (a1len == sizeof(struct sockaddr_in) && a1->sa_family == AF_INET)
+    {
+        return (memcmp(&((const struct sockaddr_in*)a1)->sin_addr,
+                       &((const struct sockaddr_in*)a2)->sin_addr,
+                       sizeof(struct in_addr)) == 0);
+    }
+
+#if HAVE_INET6
+    if (a1len == sizeof(struct sockaddr_in6) && a1->sa_family == AF_INET6)
+    {
+        return (memcmp(&((const struct sockaddr_in6*)a1)->sin6_addr,
+                       &((const struct sockaddr_in6*)a2)->sin6_addr,
+                       sizeof(struct in6_addr)) == 0);
+    }
+#endif
+
+    return false;
+}
+
+bool socket_samehostandport(const struct sockaddr* a1, socklen_t a1len,
+                            const struct sockaddr* a2, socklen_t a2len)
+{
+    return (a1len == a2len && memcmp(a1, a2, a1len) == 0);
+}
+
 #endif

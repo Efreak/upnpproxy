@@ -62,4 +62,9 @@ struct sockaddr* socket_getsockaddr(socket_t sock, socklen_t *addrlen);
 struct sockaddr* parse_addr(const char* addr, uint16_t port,
                             socklen_t *addrlen, bool allow_dnslookup);
 
+bool socket_samehost(const struct sockaddr* a1, socklen_t a1len,
+                     const struct sockaddr* a2, socklen_t a2len);
+bool socket_samehostandport(const struct sockaddr* a1, socklen_t a1len,
+                            const struct sockaddr* a2, socklen_t a2len);
+
 #endif /* SOCKET_H */
