@@ -148,10 +148,12 @@ const char* buf_rptr(buf_t buf, size_t* avail)
 
 size_t buf_rmove(buf_t buf, size_t size)
 {
-    if (size > 0)
+    if (size == 0)
     {
-        buf->full = false;
+        return;
     }
+
+    buf->full = false;
     if (buf->wptr > buf->rptr)
     {
         assert(buf->wptr >= buf->rptr + size);
