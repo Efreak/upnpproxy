@@ -115,17 +115,17 @@ ssdp_t ssdp_new(log_t log,
         }
     }
 
-    if (ssdp->rsock_4 == -1 && ssdp->rsock_6 == -1)
+    if (ssdp->rsock_4 < 0 && ssdp->rsock_6 < 0)
     {
         log_puts(log, LVL_ERR, "Unable to join any of IPv4 or IPv6 SSDP multicast group");
         free(ssdp);
         return NULL;
     }
 
-    ssdp->wsock_4 = socket_udp_connect(IPV4_ANY, 1900, true);
-    ssdp->wsock_6 = socket_udp_connect(IPV6_ANY, 1900, true);
+    ssdp->wsock_4 = socket_udp_connect("239.255.255.250", 1900, true);
+    ssdp->wsock_6 = socket_udp_connect("FF02::C", 1900, true);
 
-    if (ssdp->wsock_4 == -1 && ssdp->wsock_6 == -1)
+    if (ssdp->wsock_4 < 0 && ssdp->wsock_6 < 0)
     {
         log_puts(log, LVL_ERR, "Unable to setup sending IPv4 or IPv6 SSDP multicast group");
         socket_close(ssdp->rsock_4);
@@ -134,14 +134,23 @@ ssdp_t ssdp_new(log_t log,
         return NULL;
     }
 
-    if (ssdp->rsock_4 != -1)
+    if (ssdp->wsock_4 >= 0)
+    {
+        socket_multicast_setttl(ssdp->wsock_4, 1);
+    }
+    if (ssdp->wsock_6 >= 0)
+    {
+        socket_multicast_setttl(ssdp->wsock_6, 1);
+    }
+
+    if (ssdp->rsock_4 >= 0)
     {
         selector_add(selector, ssdp->rsock_4, ssdp, read_data, NULL);
 
         ssdp->notify_host = parse_addr("239.255.255.250", 1900,
                                        &ssdp->notify_hostlen, true);
     }
-    if (ssdp->rsock_6 != -1)
+    if (ssdp->rsock_6 >= 0)
     {
         selector_add(selector, ssdp->rsock_6, ssdp, read_data, NULL);
 
@@ -297,21 +306,21 @@ void ssdp_free(ssdp_t ssdp)
     if (ssdp == NULL)
         return;
 
-    if (ssdp->rsock_4 != -1)
+    if (ssdp->rsock_4 >= 0)
     {
         selector_remove(ssdp->selector, ssdp->rsock_4);
         socket_close(ssdp->rsock_4);
     }
-    if (ssdp->rsock_6 != -1)
+    if (ssdp->rsock_6 >= 0)
     {
         selector_remove(ssdp->selector, ssdp->rsock_6);
         socket_close(ssdp->rsock_6);
     }
-    if (ssdp->wsock_4 != -1)
+    if (ssdp->wsock_4 >= 0)
     {
         socket_close(ssdp->wsock_4);
     }
-    if (ssdp->wsock_6 != -1)
+    if (ssdp->wsock_6 >= 0)
     {
         socket_close(ssdp->wsock_6);
     }
