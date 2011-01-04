@@ -268,7 +268,7 @@ size_t map_removeat(map_t map, size_t idx)
     }
     ++idx;
     end = map->table + map->tablesize * map->elementsize;
-    for (; ptr < end; ptr += map->elementsize)
+    for (ptr += map->elementsize; ptr < end; ptr += map->elementsize)
     {
         if (*ptr != '\0')
         {
