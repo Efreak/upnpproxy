@@ -46,6 +46,7 @@ static void timecb_insert(timecb_t timer)
         if (timeval_cmp(&(timer->target), &(t->target)) <= 0)
         {
             timers->first = timer;
+            t->prev = timer;
             timer->prev = NULL;
             timer->next = t;
             return;
@@ -62,6 +63,7 @@ static void timecb_insert(timecb_t timer)
     if (timeval_cmp(&(timer->target), &(t->target)) > 0)
     {
         timers->last = timer;
+        t->next = timer;
         timer->prev = t;
         timer->next = NULL;
         return;
@@ -72,6 +74,7 @@ static void timecb_insert(timecb_t timer)
         {
             timer->prev = t->prev;
             timer->next = t;
+            t->prev->next = timer;
             t->prev = timer;
             return;
         }
