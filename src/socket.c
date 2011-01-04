@@ -231,20 +231,9 @@ static socket_t socket_connect2(int type,
         close(sock);
         return -1;
     }
-    if (type == SOCK_STREAM)
+    if (connect(sock, addr, addrlen))
     {
-        if (connect(sock, addr, addrlen))
-        {
-            if (block || errno != EINPROGRESS)
-            {
-                close(sock);
-                return -1;
-            }
-        }
-    }
-    else
-    {
-        if (bind(sock, addr, addrlen))
+        if (block || errno != EINPROGRESS)
         {
             close(sock);
             return -1;
