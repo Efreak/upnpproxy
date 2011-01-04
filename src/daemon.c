@@ -1732,7 +1732,6 @@ bool load_config(daemon_t daemon)
 
 void free_daemon(daemon_t daemon)
 {
-    ssdp_free(daemon->ssdp);
     if (daemon->serv_sock >= 0)
     {
         selector_remove(daemon->selector, daemon->serv_sock);
@@ -1745,6 +1744,7 @@ void free_daemon(daemon_t daemon)
     free(daemon->server);
     map_free(daemon->locals);
     map_free(daemon->remotes);
+    ssdp_free(daemon->ssdp);
     selector_free(daemon->selector);
     timers_free(daemon->timers);
     log_close(daemon->log);
