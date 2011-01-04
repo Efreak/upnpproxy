@@ -3,6 +3,7 @@
 
 #include "socket.h"
 #include "selector.h"
+#include "log.h"
 #include <time.h>
 
 typedef struct _ssdp_t* ssdp_t;
@@ -30,7 +31,8 @@ typedef void (* ssdp_search_callback_t)(void* userdata, ssdp_search_t* search);
 typedef void (* ssdp_search_response_callback_t)(void* userdata, ssdp_search_t* search, ssdp_notify_t* notify);
 typedef void (* ssdp_notify_callback_t)(void* userdata, ssdp_notify_t* notify);
 
-ssdp_t ssdp_new(selector_t selector,
+ssdp_t ssdp_new(log_t log,
+                selector_t selector,
                 const char* bindaddr,
                 void* userdata,
                 ssdp_search_callback_t search_callback,

@@ -4,6 +4,7 @@
 #include <signal.h>
 
 #include "ssdp.h"
+#include "log.h"
 
 static void search_cb(void* userdata, ssdp_search_t* search);
 static void search_resp_cb(void* userdata, ssdp_search_t* search,
@@ -16,22 +17,26 @@ int main(int argc, char** argv)
 {
     selector_t selector;
     ssdp_t ssdp;
+    log_t log;
     if (argc > 1)
     {
         fputs("ssdp_mon: Expects no arguments.\n", stderr);
         return EXIT_FAILURE;
     }
+    log = log_open();
     selector = selector_new();
     if (selector == NULL)
     {
         fputs("ssdp_mon: Failed to create selector.\n", stderr);
+        log_close(log);
         return EXIT_FAILURE;
     }
-    ssdp = ssdp_new(selector, NULL, NULL, search_cb, search_resp_cb, notify_cb);
+    ssdp = ssdp_new(log, selector, NULL, NULL, search_cb, search_resp_cb, notify_cb);
     if (ssdp == NULL)
     {
         fputs("ssdp_mon: Failed to setup SSDP.\n", stderr);
         selector_free(selector);
+        log_close(log);
         return EXIT_FAILURE;
     }
 
@@ -46,12 +51,14 @@ int main(int argc, char** argv)
             fputs("ssdp_mon: Selector failed.\n", stderr);
             ssdp_free(ssdp);
             selector_free(selector);
+            log_close(log);
             return EXIT_FAILURE;
         }
     }
 
     ssdp_free(ssdp);
     selector_free(selector);
+    log_close(log);
     return EXIT_SUCCESS;
 }
 

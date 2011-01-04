@@ -702,7 +702,8 @@ static void daemon_ssdp_notify_cb(void* userdata, ssdp_notify_t* notify)
 static bool daemon_setup_ssdp(daemon_t daemon)
 {
     assert(daemon->selector != NULL && daemon->ssdp == NULL);
-    daemon->ssdp = ssdp_new(daemon->selector, daemon->bind_multicast,
+    daemon->ssdp = ssdp_new(daemon->log,
+                            daemon->selector, daemon->bind_multicast,
                             daemon, daemon_ssdp_search_cb,
                             daemon_ssdp_search_resp_cb,
                             daemon_ssdp_notify_cb);
