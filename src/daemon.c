@@ -1032,10 +1032,16 @@ static void tunnel_read_cb(void* userdata, socket_t sock)
     daemon_tunnel_flush_input(tunnel);
 }
 
+static int _daemon_tunnel_flush_output(tunnel_t* tunnel);
+
 static void remote_tunnel_write_cb(void* userdata, socket_t sock)
 {
     tunnel_t* tunnel = userdata;
-    daemon_tunnel_flush_output(tunnel);
+    if (_daemon_tunnel_flush_output(tunnel) == 0)
+    {
+        selector_chkwrite(tunnel->source.remote->source->daemon->selector,
+                          sock, false);
+    }
 }
 
 static void remoteservice_read_cb(void* userdata, socket_t sock)
@@ -1066,6 +1072,8 @@ static void remoteservice_read_cb(void* userdata, socket_t sock)
     tunnelptr = map_put(remote->source->daemon->tunnels, &tunnel);
     selector_add(remote->source->daemon->selector, tunnelptr->sock, tunnelptr,
                  tunnel_read_cb, remote_tunnel_write_cb);
+    selector_chkwrite(remote->source->daemon->selector, tunnelptr->sock,
+                      false);
     pkg_create_tunnel(&pkg, remote->source_id, tunnelptr->id);
     daemon_server_write_pkg(remote->source, &pkg, true);
 }
@@ -1171,7 +1179,11 @@ static void local_tunnel_write_cb(void* userdata, socket_t sock)
         break;
     }
 
-    daemon_tunnel_flush_output(tunnel);
+    if (_daemon_tunnel_flush_output(tunnel) == 0)
+    {
+        selector_chkwrite(tunnel->source.local.server->daemon->selector, sock,
+                          false);
+    }
 }
 
 static void daemon_create_tunnel(daemon_t daemon, server_t* server,
@@ -1366,12 +1378,15 @@ static void daemon_server_incoming_cb(void* userdata, socket_t sock)
     }
 }
 
+static int _daemon_server_flush_output(server_t* server);
+
 static void daemon_server_writable_cb(void* userdata, socket_t sock)
 {
     server_t* server = userdata;
     uint32_t id;
     pkg_t* pkg;
     bool reflush = false;
+    int flushret;
 
     switch (server->state)
     {
@@ -1398,7 +1413,11 @@ static void daemon_server_writable_cb(void* userdata, socket_t sock)
         break;
     }
 
-    daemon_server_flush_output(server);
+    flushret = _daemon_server_flush_output(server);
+    if (flushret < 0)
+    {
+        return;
+    }
 
     while (vector_size(server->waiting_pkgs) > 0)
     {
@@ -1433,7 +1452,12 @@ static void daemon_server_writable_cb(void* userdata, socket_t sock)
 
     if (reflush)
     {
-        daemon_server_flush_output(server);
+        flushret = _daemon_server_flush_output(server);
+    }
+
+    if (flushret == 0)
+    {
+        selector_chkwrite(server->daemon->selector, server->sock, false);
     }
 }
 
@@ -1468,6 +1492,8 @@ static void daemon_server_accept_cb(void* userdata, socket_t sock)
                              daemon->server + i,
                              daemon_server_incoming_cb,
                              daemon_server_writable_cb);
+                selector_chkwrite(daemon->selector, daemon->server[i].sock,
+                                  false);
                 break;
             case CONN_CONNECTING:
                 selector_remove(daemon->selector, daemon->server[i].sock);
@@ -1478,6 +1504,8 @@ static void daemon_server_accept_cb(void* userdata, socket_t sock)
                              daemon->server + i,
                              daemon_server_incoming_cb,
                              daemon_server_writable_cb);
+                selector_chkwrite(daemon->selector, daemon->server[i].sock,
+                                  false);
                 break;
             case CONN_CONNECTED:
                 socket_close(s);
@@ -2060,41 +2088,53 @@ void remoteservice_free(void* _remote)
     free(remote->notify.nt);
 }
 
-static void daemon_tunnel_flush_output(tunnel_t* tunnel)
+static int _daemon_tunnel_flush_output(tunnel_t* tunnel)
 {
     size_t avail;
     const char* ptr;
     ssize_t got;
     if (tunnel->state != CONN_CONNECTED)
     {
-        return;
+        return 0;
     }
     for (;;)
     {
         ptr = buf_rptr(tunnel->out, &avail);
         if (avail == 0)
         {
-            return;
+            return 0;
         }
         got = socket_write(tunnel->sock, ptr, avail);
         if (got <= 0)
         {
+            daemon_t daemon;
             if (socket_blockingerror(tunnel->sock))
             {
-                return;
+                return 1;
             }
 
-            log_printf(tunnel->source.remote->source->daemon->log, LVL_WARN,
+            daemon = tunnel->remote ? tunnel->source.remote->source->daemon : tunnel->source.local.server->daemon;
+
+            log_printf(daemon->log, LVL_WARN,
                        "%s tunnel socket write failed",
                        tunnel->remote ? "Remote" : "Local");
             daemon_lost_tunnel(tunnel);
-            return;
+            return -1;
         }
         buf_rmove(tunnel->out, got);
     }
 }
 
-static void daemon_server_flush_output(server_t* server)
+static void daemon_tunnel_flush_output(tunnel_t* tunnel)
+{
+    if (_daemon_tunnel_flush_output(tunnel) > 0)
+    {
+        daemon_t daemon = tunnel->remote ? tunnel->source.remote->source->daemon : tunnel->source.local.server->daemon;
+        selector_chkwrite(daemon->selector, tunnel->sock, true);
+    }
+}
+
+static int _daemon_server_flush_output(server_t* server)
 {
     size_t avail;
     const char* ptr;
@@ -2104,7 +2144,7 @@ static void daemon_server_flush_output(server_t* server)
         ptr = buf_rptr(server->out, &avail);
         if (avail == 0)
         {
-            return;
+            return 0;
         }
         got = socket_write(server->sock, ptr, avail);
         if (got <= 0)
@@ -2112,7 +2152,7 @@ static void daemon_server_flush_output(server_t* server)
             char* tmp;
             if (socket_blockingerror(server->sock))
             {
-                return;
+                return 1;
             }
 
             asprinthost(&tmp, server->host, server->hostlen);
@@ -2122,9 +2162,17 @@ static void daemon_server_flush_output(server_t* server)
             free(tmp);
 
             daemon_lost_server(server->daemon, server, false);
-            return;
+            return -1;
         }
         buf_rmove(server->out, got);
+    }
+}
+
+static void daemon_server_flush_output(server_t* server)
+{
+    if (_daemon_server_flush_output(server) > 0)
+    {
+        selector_chkwrite(server->daemon->selector, server->sock, true);
     }
 }
 

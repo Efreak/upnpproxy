@@ -93,6 +93,19 @@ void selector_add(selector_t selector, socket_t sock,
     c->userdata = userdata;
 }
 
+void selector_chkwrite(selector_t selector, socket_t sock,
+                       bool check_write)
+{
+    if (check_write)
+    {
+        FD_SET(sock, &selector->write_set);
+    }
+    else
+    {
+        FD_CLR(sock, &selector->write_set);
+    }
+}
+
 void selector_remove(selector_t selector, socket_t sock)
 {
     client_t* c;
