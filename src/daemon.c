@@ -878,7 +878,7 @@ static void daemon_lost_tunnel(tunnel_t* tunnel)
     if (tunnel->remote)
     {
         daemon = tunnel->source.remote->source->daemon;
-        if (tunnel->sock != -1)
+        if (tunnel->sock >= 0)
         {
             pkg_t pkg;
             pkg_close_tunnel(&pkg, tunnel->id);
@@ -898,7 +898,7 @@ static void daemon_lost_tunnel(tunnel_t* tunnel)
 
     tunnel->state = CONN_DEAD;
 
-    if (tunnel->sock != -1)
+    if (tunnel->sock >= 0)
     {
         selector_remove(daemon->selector, tunnel->sock);
         socket_close(tunnel->sock);
@@ -950,7 +950,7 @@ static bool remote_tunnel_eq(const void* _t1, const void* _t2)
 
 static void tunnel_free(tunnel_t* tunnel)
 {
-    if (tunnel->sock != -1)
+    if (tunnel->sock >= 0)
     {
         daemon_t daemon;
         if (tunnel->remote)
@@ -1052,7 +1052,7 @@ static void remoteservice_read_cb(void* userdata, socket_t sock)
     assert(remote->sock == sock);
     memset(&tunnel, 0, sizeof(tunnel_t));
     tunnel.sock = socket_accept(sock, NULL, NULL);
-    if (tunnel.sock == -1)
+    if (tunnel.sock < 0)
     {
         return;
     }
@@ -1097,7 +1097,7 @@ static void daemon_add_remote(daemon_t daemon, server_t* server,
         return;
     }
     remote.sock = socket_tcp_listen(daemon->bind_services, 0);
-    if (remote.sock == -1 || !socket_setblocking(remote.sock, false))
+    if (remote.sock < 0 || !socket_setblocking(remote.sock, false))
     {
         log_puts(daemon->log, LVL_WARN, "Unable to listen for service");
         socket_close(remote.sock);
@@ -1208,7 +1208,7 @@ static void daemon_create_tunnel(daemon_t daemon, server_t* server,
     tunnel.sock = socket_tcp_connect2(tunnel.source.local.service->host,
                                       tunnel.source.local.service->hostlen,
                                       false);
-    if (tunnel.sock == -1)
+    if (tunnel.sock < 0)
     {
         char* tmp;
         asprinthost(&tmp, tunnel.source.local.service->host,
@@ -1524,7 +1524,7 @@ static void daemon_server_accept_cb(void* userdata, socket_t sock)
 
 static bool daemon_setup_server(daemon_t daemon)
 {
-    assert(daemon->selector != NULL && daemon->serv_sock == -1);
+    assert(daemon->selector != NULL && daemon->serv_sock < 0);
     daemon->serv_sock = socket_tcp_listen(daemon->bind_server,
                                           daemon->server_port);
     if (daemon->serv_sock >= 0)
@@ -1546,7 +1546,7 @@ static bool daemon_setup_server(daemon_t daemon)
 
 static bool daemon_setup_remote_server(daemon_t daemon, server_t* srv)
 {
-    assert(daemon->selector != NULL && srv->host != NULL && srv->sock == -1 && srv->state == CONN_DEAD);
+    assert(daemon->selector != NULL && srv->host != NULL && srv->sock < 0 && srv->state == CONN_DEAD);
     if (srv->in == NULL)
     {
         srv->in = buf_new(SERVER_BUFFER_IN);
@@ -2075,7 +2075,7 @@ void remoteservice_free(void* _remote)
     {
         ssdp_byebye(daemon->ssdp, &(remote->notify));
     }
-    if (remote->sock != -1)
+    if (remote->sock >= 0)
     {
         selector_remove(daemon->selector, remote->sock);
         socket_close(remote->sock);
@@ -2231,7 +2231,7 @@ static void daemon_tunnel_flush_input(tunnel_t* tunnel)
         const char* ptr = buf_rptr(tunnel->in, &avail);
         if (avail == 0)
         {
-            if (tunnel->sock == -1)
+            if (tunnel->sock < 0)
             {
                 pkg_close_tunnel(&pkg, tunnel->id);
                 daemon_server_write_pkg(srv, &pkg, true);
