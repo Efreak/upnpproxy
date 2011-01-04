@@ -117,6 +117,7 @@ ssdp_t ssdp_new(log_t log,
 
     if (ssdp->rsock_4 == -1 && ssdp->rsock_6 == -1)
     {
+        log_puts(log, LVL_ERR, "Unable to join any of IPv4 or IPv6 SSDP multicast group");
         free(ssdp);
         return NULL;
     }
@@ -126,6 +127,9 @@ ssdp_t ssdp_new(log_t log,
 
     if (ssdp->wsock_4 == -1 && ssdp->wsock_6 == -1)
     {
+        log_puts(log, LVL_ERR, "Unable to setup sending IPv4 or IPv6 SSDP multicast group");
+        socket_close(ssdp->rsock_4);
+        socket_close(ssdp->rsock_6);
         free(ssdp);
         return NULL;
     }
