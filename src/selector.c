@@ -133,7 +133,7 @@ void selector_remove(selector_t selector, socket_t sock)
             else
             {
                 selector->clients--;
-                memmove(c, c + 1, (selector->client + selector->clients) - c);
+                memmove(c, c + 1, (selector->clients - i) * sizeof(client_t));
             }
             break;
         }
@@ -212,7 +212,7 @@ bool selector_tick(selector_t selector, unsigned long timeout_ms)
         {
             selector->delete_cnt--;
             selector->clients--;
-            memmove(c, c + 1, (selector->client + selector->clients) - c);
+            memmove(c, c + 1, (selector->clients - (i - 1)) * sizeof(client_t));
         }
         else
         {
