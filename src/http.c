@@ -148,7 +148,8 @@ void pkg_addbody(pkg_t pkg, const char* body)
 
 bool pkg_send(pkg_t pkg, socket_t sock, log_t log)
 {
-    size_t pos = 0, sent;
+    size_t pos = 0;
+    ssize_t sent;
     if (!pkg->got_body)
     {
         pkg_append(pkg, "\r\n");
