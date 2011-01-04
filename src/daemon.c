@@ -580,6 +580,20 @@ static bool daemon_add_local(daemon_t daemon, ssdp_notify_t* notify)
     localptr->expirecb = timers_add(daemon->timers,
                                     (localptr->expires - now) * 1000,
                                     localptr, daemon_localservice_expire);
+
+    if (localptr->daemon != NULL)
+    {
+        /* Tell all connected servers about the new service */
+        pkg_t pkg;
+        size_t i;
+        pkg_new_service(&pkg, localptr->id, localptr->usn, localptr->location,
+                        localptr->service, localptr->server);
+        for (i = 0; i < daemon->servers; ++i)
+        {
+            daemon_server_write_pkg(daemon->server + i, &pkg);
+        }
+    }
+
     return true;
 }
 
@@ -1364,8 +1378,22 @@ static void daemon_server_writable_cb(void* userdata, socket_t sock)
     case CONN_DEAD:
         return;
     case CONN_CONNECTING:
+    {
+        size_t i;
+        daemon_t daemon = server->daemon;
         server->state = CONN_CONNECTED;
+
+        for (i = map_begin(daemon->locals); i != map_end(daemon->locals);
+             i = map_next(daemon->locals, i))
+        {
+            pkg_t pkg;
+            localservice_t* local = map_getat(daemon->locals, i);
+            pkg_new_service(&pkg, local->id, local->usn, local->location,
+                            local->service, local->server);
+            daemon_server_write_pkg(server, &pkg);
+        }
         break;
+    }
     case CONN_CONNECTED:
         break;
     }
@@ -1974,6 +2002,17 @@ void localservice_free(void* _local)
         timecb_cancel(local->expirecb);
         local->expirecb = NULL;
     }
+    if (local->daemon != NULL)
+    {
+        /* Tell all connected servers about the loss */
+        pkg_t pkg;
+        size_t i;
+        pkg_old_service(&pkg, local->id);
+        for (i = 0; i < local->daemon->servers; ++i)
+        {
+            daemon_server_write_pkg(local->daemon->server + i, &pkg);
+        }
+    }
     free(local->host);
     free(local->usn);
     free(local->location);
@@ -2091,6 +2130,11 @@ static void daemon_server_flush_output(server_t* server)
 
 static void daemon_server_write_pkg(server_t* server, pkg_t* pkg)
 {
+    if (server->state == CONN_DEAD)
+    {
+        return;
+    }
+
     if (!pkg_write(server->out, pkg))
     {
         pkg_t* pkgcpy = pkg_dup(pkg);
@@ -2099,6 +2143,8 @@ static void daemon_server_write_pkg(server_t* server, pkg_t* pkg)
             vector_push(server->waiting_pkgs, &pkgcpy);
         }
     }
+
+    daemon_server_flush_output(server);
 }
 
 static void daemon_tunnel_flush_input(tunnel_t* tunnel)
