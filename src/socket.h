@@ -34,6 +34,7 @@ bool socket_multicast_join(socket_t sock, const char* group,
                            const char* bindaddr);
 bool socket_multicast_drop(socket_t sock, const char* group,
                            const char* bindaddr);
+bool socket_multicast_setttl(socket_t sock, unsigned char ttl);
 
 ssize_t socket_read(socket_t sock, void* data, size_t max);
 ssize_t socket_write(socket_t sock, const void* data, size_t max);

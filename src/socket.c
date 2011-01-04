@@ -401,6 +401,12 @@ bool socket_multicast_drop(socket_t sock, const char* group,
     return socket_multicast(sock, group, bindaddr, false);
 }
 
+bool socket_multicast_setttl(socket_t sock, unsigned char ttl)
+{
+    return setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL,
+                      &ttl, sizeof(ttl)) == 0;
+}
+
 void socket_close(socket_t sock)
 {
     if (sock == -1)
