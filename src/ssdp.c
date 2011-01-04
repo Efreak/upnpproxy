@@ -21,7 +21,8 @@ struct _ssdp_t
     struct sockaddr* notify_host;
     socklen_t notify_hostlen;
 
-    socket_t sock_4, sock_6;
+    socket_t rsock_4, wsock_4;
+    socket_t rsock_6, wsock_6;
 };
 
 static void read_data(void* userdata, socket_t sock);
@@ -47,92 +48,104 @@ ssdp_t ssdp_new(log_t log,
 
     if (bindaddr != NULL)
     {
-        ssdp->sock_4 = -1;
-        ssdp->sock_6 = -1;
+        ssdp->rsock_4 = -1;
+        ssdp->rsock_6 = -1;
         if (addrstr_is_ipv4(bindaddr))
         {
-            ssdp->sock_4 = socket_udp_listen(IPV4_ANY, 1900);
-            if (ssdp->sock_4 >= 0)
+            ssdp->rsock_4 = socket_udp_listen(IPV4_ANY, 1900);
+            if (ssdp->rsock_4 >= 0)
             {
-                if (!socket_setblocking(ssdp->sock_4, false) ||
-                    !socket_multicast_join(ssdp->sock_4, "239.255.255.250",
+                if (!socket_setblocking(ssdp->rsock_4, false) ||
+                    !socket_multicast_join(ssdp->rsock_4, "239.255.255.250",
                                            bindaddr))
                 {
-                    log_printf(log, LVL_WARN, "Error joining ipv4 multicast groudp (239.255.255.250): %s", socket_strerror(ssdp->sock_4));
-                    socket_close(ssdp->sock_4);
-                    ssdp->sock_4 = -1;
+                    log_printf(log, LVL_WARN, "Error joining ipv4 multicast group (239.255.255.250): %s", socket_strerror(ssdp->rsock_4));
+                    socket_close(ssdp->rsock_4);
+                    ssdp->rsock_4 = -1;
                 }
             }
             else
             {
-                log_printf(log, LVL_WARN, "Error listening on *:1900 ipv4: %s", socket_strerror(ssdp->sock_4));
+                log_printf(log, LVL_WARN, "Error listening on *:1900 ipv4: %s", socket_strerror(ssdp->rsock_4));
             }
         }
         if (addrstr_is_ipv6(bindaddr))
         {
-            ssdp->sock_6 = socket_udp_listen(IPV6_ANY, 1900);
-            if (ssdp->sock_6 >= 0)
+            ssdp->rsock_6 = socket_udp_listen(IPV6_ANY, 1900);
+            if (ssdp->rsock_6 >= 0)
             {
-                if (!socket_setblocking(ssdp->sock_6, false) ||
-                    !socket_multicast_join(ssdp->sock_6, "FF02::C", bindaddr))
+                if (!socket_setblocking(ssdp->rsock_6, false) ||
+                    !socket_multicast_join(ssdp->rsock_6, "FF02::C", bindaddr))
                 {
-                    log_printf(log, LVL_WARN, "Error joining ipv6 multicast groudp (FF02::C): %s", socket_strerror(ssdp->sock_6));
-                    socket_close(ssdp->sock_6);
-                    ssdp->sock_6 = -1;
+                    log_printf(log, LVL_WARN, "Error joining ipv6 multicast group (FF02::C): %s", socket_strerror(ssdp->rsock_6));
+                    socket_close(ssdp->rsock_6);
+                    ssdp->rsock_6 = -1;
                 }
             }
             else
             {
-                log_printf(log, LVL_WARN, "Error listening on *:1900 ipv6: %s", socket_strerror(ssdp->sock_6));
+                log_printf(log, LVL_WARN, "Error listening on *:1900 ipv6: %s", socket_strerror(ssdp->rsock_6));
             }
         }
     }
     else
     {
-        ssdp->sock_4 = socket_udp_listen(IPV4_ANY, 1900);
-        if (ssdp->sock_4 >= 0)
+        ssdp->rsock_4 = socket_udp_listen(IPV4_ANY, 1900);
+        if (ssdp->rsock_4 >= 0)
         {
-            if (!socket_setblocking(ssdp->sock_4, false) ||
-                !socket_multicast_join(ssdp->sock_4, "239.255.255.250", NULL))
+            if (!socket_setblocking(ssdp->rsock_4, false) ||
+                !socket_multicast_join(ssdp->rsock_4, "239.255.255.250", NULL))
             {
-                log_printf(log, LVL_WARN, "Error joining ipv4 multicast groudp (239.255.255.250): %s", socket_strerror(ssdp->sock_4));
-                socket_close(ssdp->sock_4);
-                ssdp->sock_4 = -1;
+                log_printf(log, LVL_WARN, "Error joining ipv4 multicast group (239.255.255.250): %s", socket_strerror(ssdp->rsock_4));
+                socket_close(ssdp->rsock_4);
+                ssdp->rsock_4 = -1;
             }
         }
 
-        ssdp->sock_6 = socket_udp_listen(IPV6_ANY, 1900);
-        if (ssdp->sock_6 >= 0)
+        ssdp->rsock_6 = socket_udp_listen(IPV6_ANY, 1900);
+        if (ssdp->rsock_6 >= 0)
         {
-            if (!socket_setblocking(ssdp->sock_6, false) ||
-                !socket_multicast_join(ssdp->sock_6, "FF02::C", NULL))
+            if (!socket_setblocking(ssdp->rsock_6, false) ||
+                !socket_multicast_join(ssdp->rsock_6, "FF02::C", NULL))
             {
-                log_printf(log, LVL_WARN, "Error joining ipv6 multicast groudp (FF02::C): %s", socket_strerror(ssdp->sock_6));
-                socket_close(ssdp->sock_6);
-                ssdp->sock_6 = -1;
+                log_printf(log, LVL_WARN, "Error joining ipv6 multicast group (FF02::C): %s", socket_strerror(ssdp->rsock_6));
+                socket_close(ssdp->rsock_6);
+                ssdp->rsock_6 = -1;
             }
         }
     }
 
-    if (ssdp->sock_4 == -1 && ssdp->sock_6 == -1)
+    if (ssdp->rsock_4 == -1 && ssdp->rsock_6 == -1)
     {
         free(ssdp);
         return NULL;
     }
 
-    if (ssdp->sock_4 != -1)
+    ssdp->wsock_4 = socket_udp_connect(IPV4_ANY, 1900, true);
+    ssdp->wsock_6 = socket_udp_connect(IPV6_ANY, 1900, true);
+
+    if (ssdp->wsock_4 == -1 && ssdp->wsock_6 == -1)
     {
-        selector_add(selector, ssdp->sock_4, ssdp, read_data, NULL);
+        free(ssdp);
+        return NULL;
+    }
+
+    if (ssdp->rsock_4 != -1)
+    {
+        selector_add(selector, ssdp->rsock_4, ssdp, read_data, NULL);
 
         ssdp->notify_host = parse_addr("239.255.255.250", 1900,
                                        &ssdp->notify_hostlen, true);
     }
-    if (ssdp->sock_6 != -1)
+    if (ssdp->rsock_6 != -1)
     {
-        selector_add(selector, ssdp->sock_6, ssdp, read_data, NULL);
+        selector_add(selector, ssdp->rsock_6, ssdp, read_data, NULL);
 
-        ssdp->notify_host = parse_addr("FF02::C", 1900,
-                                       &ssdp->notify_hostlen, true);
+        if (ssdp->notify_host == NULL)
+        {
+            ssdp->notify_host = parse_addr("FF02::C", 1900,
+                                           &ssdp->notify_hostlen, true);
+        }
     }
 
     return ssdp;
@@ -156,11 +169,11 @@ bool ssdp_search_response(ssdp_t ssdp, ssdp_search_t* search,
     bool ret;
     assert(search && notify && search->host && search->st &&
            notify->expires >= time(NULL) && notify->usn);
-    if (addr_is_ipv4(search->host, search->hostlen) && ssdp->sock_4 < 0)
+    if (addr_is_ipv4(search->host, search->hostlen) && ssdp->wsock_4 < 0)
     {
         return false;
     }
-    if (addr_is_ipv6(search->host, search->hostlen) && ssdp->sock_6 < 0)
+    if (addr_is_ipv6(search->host, search->hostlen) && ssdp->wsock_6 < 0)
     {
         return false;
     }
@@ -183,11 +196,11 @@ bool ssdp_search_response(ssdp_t ssdp, ssdp_search_t* search,
     resp_addheader(resp, "Location", notify->location);
     if (addr_is_ipv4(search->host, search->hostlen))
     {
-        ret = resp_send(resp, ssdp->sock_4, ssdp->log);
+        ret = resp_send(resp, ssdp->wsock_4, ssdp->log);
     }
     else
     {
-        ret = resp_send(resp, ssdp->sock_6, ssdp->log);
+        ret = resp_send(resp, ssdp->wsock_6, ssdp->log);
     }
     resp_free(resp);
     return ret;
@@ -200,11 +213,11 @@ bool ssdp_notify(ssdp_t ssdp, ssdp_notify_t* notify)
     bool ret;
     assert(notify && notify->host && notify->nt && notify->usn
            && notify->location && notify->expires >= time(NULL));
-    if (addr_is_ipv4(notify->host, notify->hostlen) && ssdp->sock_4 < 0)
+    if (addr_is_ipv4(notify->host, notify->hostlen) && ssdp->wsock_4 < 0)
     {
         return false;
     }
-    if (addr_is_ipv6(notify->host, notify->hostlen) && ssdp->sock_6 < 0)
+    if (addr_is_ipv6(notify->host, notify->hostlen) && ssdp->wsock_6 < 0)
     {
         return false;
     }
@@ -228,11 +241,11 @@ bool ssdp_notify(ssdp_t ssdp, ssdp_notify_t* notify)
     free(tmp);
     if (addr_is_ipv4(notify->host, notify->hostlen))
     {
-        ret = req_send(req, ssdp->sock_4, ssdp->log);
+        ret = req_send(req, ssdp->wsock_4, ssdp->log);
     }
     else
     {
-        ret = req_send(req, ssdp->sock_6, ssdp->log);
+        ret = req_send(req, ssdp->wsock_6, ssdp->log);
     }
     req_free(req);
     return ret;
@@ -244,11 +257,11 @@ bool ssdp_byebye(ssdp_t ssdp, ssdp_notify_t* notify)
     http_req_t req;
     bool ret;
     assert(notify && notify->host && notify->nt && notify->usn);
-    if (addr_is_ipv4(notify->host, notify->hostlen) && ssdp->sock_4 < 0)
+    if (addr_is_ipv4(notify->host, notify->hostlen) && ssdp->wsock_4 < 0)
     {
         return false;
     }
-    if (addr_is_ipv6(notify->host, notify->hostlen) && ssdp->sock_6 < 0)
+    if (addr_is_ipv6(notify->host, notify->hostlen) && ssdp->wsock_6 < 0)
     {
         return false;
     }
@@ -265,11 +278,11 @@ bool ssdp_byebye(ssdp_t ssdp, ssdp_notify_t* notify)
     req_addheader(req, "USN", notify->usn);
     if (addr_is_ipv4(notify->host, notify->hostlen))
     {
-        ret = req_send(req, ssdp->sock_4, ssdp->log);
+        ret = req_send(req, ssdp->wsock_4, ssdp->log);
     }
     else
     {
-        ret = req_send(req, ssdp->sock_6, ssdp->log);
+        ret = req_send(req, ssdp->wsock_6, ssdp->log);
     }
     req_free(req);
     return ret;
@@ -280,15 +293,23 @@ void ssdp_free(ssdp_t ssdp)
     if (ssdp == NULL)
         return;
 
-    if (ssdp->sock_4 != -1)
+    if (ssdp->rsock_4 != -1)
     {
-        selector_remove(ssdp->selector, ssdp->sock_4);
-        socket_close(ssdp->sock_4);
+        selector_remove(ssdp->selector, ssdp->rsock_4);
+        socket_close(ssdp->rsock_4);
     }
-    if (ssdp->sock_6 != -1)
+    if (ssdp->rsock_6 != -1)
     {
-        selector_remove(ssdp->selector, ssdp->sock_6);
-        socket_close(ssdp->sock_6);
+        selector_remove(ssdp->selector, ssdp->rsock_6);
+        socket_close(ssdp->rsock_6);
+    }
+    if (ssdp->wsock_4 != -1)
+    {
+        socket_close(ssdp->wsock_4);
+    }
+    if (ssdp->wsock_6 != -1)
+    {
+        socket_close(ssdp->wsock_6);
     }
     free(ssdp->notify_host);
     free(ssdp);
@@ -373,13 +394,13 @@ void read_data(void* userdata, socket_t sock)
             }
             log_printf(ssdp->log, LVL_ERR, "Error reading from SSDP UDP multicast socket: %s", socket_strerror(sock));
             selector_remove(ssdp->selector, sock);
-            if (sock == ssdp->sock_4)
+            if (sock == ssdp->rsock_4)
             {
-                ssdp->sock_4 = -1;
+                ssdp->rsock_4 = -1;
             }
-            if (sock == ssdp->sock_6)
+            else if (sock == ssdp->rsock_6)
             {
-                ssdp->sock_6 = -1;
+                ssdp->rsock_6 = -1;
             }
             socket_close(sock);
             return;
