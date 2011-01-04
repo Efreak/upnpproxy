@@ -139,7 +139,7 @@ bool ssdp_search_response(ssdp_t ssdp, ssdp_search_t* search,
     char* tmp;
     http_resp_t resp;
     bool ret;
-    assert(search && notify && search->host && search->s && search->st &&
+    assert(search && notify && search->host && search->st &&
            notify->expires >= time(NULL) && notify->usn);
     if (addr_is_ipv4(search->host, search->hostlen) && ssdp->sock_4 < 0)
     {
@@ -154,7 +154,10 @@ bool ssdp_search_response(ssdp_t ssdp, ssdp_search_t* search,
     {
         return false;
     }
-    resp_addheader(resp, "S", search->s);
+    if (search->s != NULL)
+    {
+        resp_addheader(resp, "S", search->s);
+    }
     resp_addheader(resp, "Ext", "");
     asprintf(&tmp, "no-cache=\"Ext\", max-age = %u",
              ((unsigned int)(notify->expires - time(NULL))));
