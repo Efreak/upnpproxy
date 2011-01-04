@@ -581,7 +581,6 @@ static bool daemon_add_local(daemon_t daemon, ssdp_notify_t* notify)
                                     (localptr->expires - now) * 1000,
                                     localptr, daemon_localservice_expire);
 
-    if (localptr->daemon != NULL)
     {
         /* Tell all connected servers about the new service */
         pkg_t pkg;
