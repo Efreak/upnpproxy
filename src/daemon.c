@@ -2130,23 +2130,37 @@ static void daemon_server_flush_output(server_t* server)
 
 static void daemon_server_write_pkg(server_t* server, pkg_t* pkg, bool flush)
 {
+    unsigned char try;
+
     if (server->state == CONN_DEAD)
     {
         return;
     }
 
-    if (!pkg_write(server->out, pkg))
+    for (try = 0; try < 2; ++try)
     {
-        pkg_t* pkgcpy = pkg_dup(pkg);
-        if (pkgcpy != NULL)
+        if (pkg_write(server->out, pkg))
         {
-            vector_push(server->waiting_pkgs, &pkgcpy);
+            if (flush)
+            {
+                daemon_server_flush_output(server);
+            }
+            return;
         }
-    }
 
-    if (flush)
-    {
-        daemon_server_flush_output(server);
+        if (try == 0)
+        {
+            daemon_server_flush_output(server);
+        }
+        else
+        {
+            pkg_t* pkgcpy = pkg_dup(pkg);
+            if (pkgcpy != NULL)
+            {
+                vector_push(server->waiting_pkgs, &pkgcpy);
+            }
+            return;
+        }
     }
 }
 
