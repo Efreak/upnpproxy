@@ -155,7 +155,7 @@ static void remoteservice_free(void* _remote);
 static bool daemon_setup_remote_server(daemon_t daemon, server_t* srv);
 
 static void daemon_server_flush_output(server_t* server);
-static void daemon_server_write_pkg(server_t* server, pkg_t* pkg);
+static void daemon_server_write_pkg(server_t* server, pkg_t* pkg, bool flush);
 
 static void daemon_tunnel_flush_input(tunnel_t* tunnel);
 static void daemon_tunnel_flush_output(tunnel_t* tunnel);
@@ -590,7 +590,7 @@ static bool daemon_add_local(daemon_t daemon, ssdp_notify_t* notify)
                         localptr->service, localptr->server);
         for (i = 0; i < daemon->servers; ++i)
         {
-            daemon_server_write_pkg(daemon->server + i, &pkg);
+            daemon_server_write_pkg(daemon->server + i, &pkg, true);
         }
     }
 
@@ -882,7 +882,7 @@ static void daemon_lost_tunnel(tunnel_t* tunnel)
         {
             pkg_t pkg;
             pkg_close_tunnel(&pkg, tunnel->id);
-            daemon_server_write_pkg(tunnel->source.remote->source, &pkg);
+            daemon_server_write_pkg(tunnel->source.remote->source, &pkg, true);
         }
     }
     else
@@ -892,7 +892,7 @@ static void daemon_lost_tunnel(tunnel_t* tunnel)
         {
             pkg_t pkg;
             pkg_close_tunnel(&pkg, tunnel->id);
-            daemon_server_write_pkg(tunnel->source.local.server, &pkg);
+            daemon_server_write_pkg(tunnel->source.local.server, &pkg, true);
         }
     }
 
@@ -1067,7 +1067,7 @@ static void remoteservice_read_cb(void* userdata, socket_t sock)
     selector_add(remote->source->daemon->selector, tunnelptr->sock, tunnelptr,
                  tunnel_read_cb, remote_tunnel_write_cb);
     pkg_create_tunnel(&pkg, remote->source_id, tunnelptr->id);
-    daemon_server_write_pkg(remote->source, &pkg);
+    daemon_server_write_pkg(remote->source, &pkg, true);
 }
 
 static void daemon_add_remote(daemon_t daemon, server_t* server,
@@ -1390,7 +1390,7 @@ static void daemon_server_writable_cb(void* userdata, socket_t sock)
             localservice_t* local = map_getat(daemon->locals, i);
             pkg_new_service(&pkg, local->id, local->usn, local->location,
                             local->service, local->server);
-            daemon_server_write_pkg(server, &pkg);
+            daemon_server_write_pkg(server, &pkg, false);
         }
         break;
     }
@@ -2010,7 +2010,7 @@ void localservice_free(void* _local)
         pkg_old_service(&pkg, local->id);
         for (i = 0; i < local->daemon->servers; ++i)
         {
-            daemon_server_write_pkg(local->daemon->server + i, &pkg);
+            daemon_server_write_pkg(local->daemon->server + i, &pkg, true);
         }
     }
     free(local->host);
@@ -2128,7 +2128,7 @@ static void daemon_server_flush_output(server_t* server)
     }
 }
 
-static void daemon_server_write_pkg(server_t* server, pkg_t* pkg)
+static void daemon_server_write_pkg(server_t* server, pkg_t* pkg, bool flush)
 {
     if (server->state == CONN_DEAD)
     {
@@ -2144,7 +2144,10 @@ static void daemon_server_write_pkg(server_t* server, pkg_t* pkg)
         }
     }
 
-    daemon_server_flush_output(server);
+    if (flush)
+    {
+        daemon_server_flush_output(server);
+    }
 }
 
 static void daemon_tunnel_flush_input(tunnel_t* tunnel)
@@ -2169,7 +2172,7 @@ static void daemon_tunnel_flush_input(tunnel_t* tunnel)
             if (tunnel->sock == -1)
             {
                 pkg_close_tunnel(&pkg, tunnel->id);
-                daemon_server_write_pkg(srv, &pkg);
+                daemon_server_write_pkg(srv, &pkg, true);
                 return;
             }
             dataleft = false;
