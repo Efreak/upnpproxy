@@ -1343,7 +1343,8 @@ static void daemon_server_incoming_cb(void* userdata, socket_t sock)
             asprinthost(&tmp, server->host, server->hostlen);
             log_printf(daemon->log, LVL_WARN,
                        "Lost connection with server %s: %s",
-                       tmp, socket_strerror(sock));
+                       tmp,
+                       got < 0 ? socket_strerror(sock) : "Connection closed");
             free(tmp);
             daemon_lost_server(daemon, server, false);
             return;
