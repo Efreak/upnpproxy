@@ -574,6 +574,23 @@ bool addr_is_any(const struct sockaddr* addr, socklen_t addrlen)
     return false;
 }
 
+uint16_t addr_getport(const struct sockaddr* addr, socklen_t addrlen)
+{
+    if (addrlen == sizeof(struct sockaddr_in) && addr->sa_family == AF_INET)
+    {
+        const struct sockaddr_in* a = (const struct sockaddr_in *)addr;
+        return ntohs(a->sin_port);
+    }
+#if HAVE_INET6
+    if (addrlen == sizeof(struct sockaddr_in6) && addr->sa_family == AF_INET6)
+    {
+        const struct sockaddr_in6* a = (const struct sockaddr_in6 *)addr;
+        return ntohs(a->sin6_port);
+    }
+#endif
+    return 0;
+}
+
 void addr_setport(struct sockaddr* addr, socklen_t addrlen, uint16_t newport)
 {
     if (addrlen == sizeof(struct sockaddr_in) && addr->sa_family == AF_INET)
@@ -635,7 +652,8 @@ struct sockaddr* socket_getsockaddr(socket_t sock, socklen_t *addrlen)
     return addr;
 }
 
-struct sockaddr* socket_getlocalhost(socket_t sock, socklen_t* addrlen)
+struct sockaddr* socket_getlocalhost(socket_t sock, uint16_t port,
+                                     socklen_t* addrlen)
 {
     const char* myname = NULL;
     struct hostent* ent = NULL;
@@ -718,7 +736,7 @@ struct sockaddr* socket_getlocalhost(socket_t sock, socklen_t* addrlen)
                 return NULL;
             a->sin6_family = AF_INET6;
             memcpy(&(a->sin6_addr), ent->h_addr, sizeof(struct in6_addr));
-            a->sin6_port = 0;
+            a->sin6_port = htons(port);
             if (addrlen != NULL) *addrlen = sizeof(struct sockaddr_in6);
             return (struct sockaddr*)a;
         }
@@ -730,14 +748,14 @@ struct sockaddr* socket_getlocalhost(socket_t sock, socklen_t* addrlen)
                 return NULL;
             a->sin_family = AF_INET;
             memcpy(&(a->sin_addr), ent->h_addr, sizeof(struct in_addr));
-            a->sin_port = 0;
+            a->sin_port = htons(port);
             if (addrlen != NULL) *addrlen = sizeof(struct sockaddr_in);
             return (struct sockaddr*)a;
         }
     }
 
     /* Should really not happen */
-    return parse_addr(IPV4_ANY, 0, addrlen, false);
+    return parse_addr(IPV4_ANY, port, addrlen, false);
 }
 
 bool socket_samehost(const struct sockaddr* a1, socklen_t a1len,

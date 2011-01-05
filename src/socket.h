@@ -58,6 +58,7 @@ bool addrstr_is_ipv6(const char* addr);
 /* Any as in 0.0.0.0 or :: */
 bool addr_is_any(const struct sockaddr* addr, socklen_t addrlen);
 
+uint16_t addr_getport(const struct sockaddr* addr, socklen_t addrlen);
 void addr_setport(struct sockaddr* addr, socklen_t addrlen, uint16_t newport);
 
 struct sockaddr* socket_getpeeraddr(socket_t sock, socklen_t *addrlen);
@@ -65,7 +66,8 @@ struct sockaddr* socket_getsockaddr(socket_t sock, socklen_t *addrlen);
 
 /* The socket is only used to select between an IPv4 or IPv6 address
  * if available. May be < 0 and is then ignored. */
-struct sockaddr* socket_getlocalhost(socket_t sock, socklen_t* addrlen);
+struct sockaddr* socket_getlocalhost(socket_t sock, uint16_t port,
+                                     socklen_t* addrlen);
 
 struct sockaddr* parse_addr(const char* addr, uint16_t port,
                             socklen_t *addrlen, bool allow_dnslookup);
