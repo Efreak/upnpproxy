@@ -687,7 +687,7 @@ static void daemon_ssdp_notify_cb(void* userdata, ssdp_notify_t* notify)
          i = map_next(daemon->remotes, i))
     {
         remoteservice_t* remote = map_getat(daemon->remotes, i);
-        if (strcmp(remote->usn, notify->usn) == 0)
+        if (strcmp(remote->notify.usn, notify->usn) == 0)
         {
             /* One of our own */
             return;
