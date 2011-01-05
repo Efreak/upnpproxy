@@ -929,7 +929,7 @@ static uint32_t local_tunnel_hash(const void* _tunnel)
 {
     const tunnel_t* tunnel = _tunnel;
     assert(!tunnel->remote);
-    return tunnel->id + tunnel->source.local.service->id;
+    return tunnel->id;
 }
 
 static bool local_tunnel_eq(const void* _t1, const void* _t2)
@@ -937,8 +937,7 @@ static bool local_tunnel_eq(const void* _t1, const void* _t2)
     const tunnel_t* t1 = _t1;
     const tunnel_t* t2 = _t2;
     assert(!t1->remote && !t2->remote);
-    return t1->id == t2->id &&
-        t1->source.local.service == t2->source.local.service;
+    return t1->id == t2->id;
 }
 
 static uint32_t remote_tunnel_hash(const void* _tunnel)
