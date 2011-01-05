@@ -683,6 +683,16 @@ static void daemon_ssdp_notify_cb(void* userdata, ssdp_notify_t* notify)
 {
     daemon_t daemon = (daemon_t)userdata;
     size_t i;
+    for (i = map_begin(daemon->remotes); i != map_end(daemon->remotes);
+         i = map_next(daemon->remotes, i))
+    {
+        remoteservice_t* remote = map_getat(daemon->remotes, i);
+        if (strcmp(remote->usn, notify->usn) == 0)
+        {
+            /* One of our own */
+            return;
+        }
+    }
     for (i = map_begin(daemon->locals); i != map_end(daemon->locals);
          i = map_next(daemon->locals, i))
     {
@@ -1116,8 +1126,9 @@ static void daemon_add_remote(daemon_t daemon, server_t* server,
     if (addr_is_any(host, hostlen))
     {
         /* This won't do, we need an actual address */
+        uint16_t port = addr_getport(host, hostlen);
         free(host);
-        host = socket_getlocalhost(remote.sock, &hostlen);
+        host = socket_getlocalhost(remote.sock, port, &hostlen);
     }
     if (!parse_location(new_service->location, &proto, NULL, NULL, &path))
     {
