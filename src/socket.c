@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <netdb.h>
+#include <limits.h>
 
 #include <errno.h>
 
@@ -556,6 +557,23 @@ bool addrstr_is_ipv6(const char* addr)
 #endif
 }
 
+bool addr_is_any(const struct sockaddr* addr, socklen_t addrlen)
+{
+    if (addrlen == sizeof(struct sockaddr_in) && addr->sa_family == AF_INET)
+    {
+        const struct sockaddr_in* a = (const struct sockaddr_in *)addr;
+        return a->sin_addr.s_addr == htonl(INADDR_ANY);
+    }
+#if HAVE_INET6
+    if (addrlen == sizeof(struct sockaddr_in6) && addr->sa_family == AF_INET6)
+    {
+        const struct sockaddr_in6* a = (const struct sockaddr_in6 *)addr;
+        return a->sin6_addr.s6_addr == in6addr_any.s6_addr;
+    }
+#endif
+    return false;
+}
+
 void addr_setport(struct sockaddr* addr, socklen_t addrlen, uint16_t newport)
 {
     if (addrlen == sizeof(struct sockaddr_in) && addr->sa_family == AF_INET)
@@ -615,6 +633,111 @@ struct sockaddr* socket_getsockaddr(socket_t sock, socklen_t *addrlen)
         *addrlen = len;
     }
     return addr;
+}
+
+struct sockaddr* socket_getlocalhost(socket_t sock, socklen_t* addrlen)
+{
+    const char* myname = NULL;
+    struct hostent* ent = NULL;
+    char buf[HOST_NAME_MAX + 1], *tmp = NULL;
+    if (gethostname(buf, sizeof(buf)) == 0)
+    {
+        myname = buf;
+    }
+    else
+    {
+        size_t ns = sizeof(buf);
+        for (;;)
+        {
+            char* tmp2;
+            ns *= 2;
+            tmp2 = realloc(tmp, ns);
+            if (tmp2 == NULL)
+            {
+                free(tmp);
+                myname = "localhost";
+                break;
+            }
+            tmp = tmp2;
+            if (gethostname(tmp, ns) == 0)
+            {
+                myname = tmp;
+                break;
+            }
+        }
+    }
+
+    if (sock >= 0)
+    {
+        socklen_t hostlen;
+        struct sockaddr* host = socket_getsockaddr(sock, &hostlen);
+        if (host != NULL)
+        {
+            if (addr_is_ipv4(host, hostlen))
+            {
+#if HAVE_INET6
+                ent = gethostbyname2(myname, AF_INET);
+#else
+                ent = gethostbyname(myname);
+#endif
+            }
+            else if (addr_is_ipv6(host, hostlen))
+            {
+#if HAVE_INET6
+                ent = gethostbyname2(myname, AF_INET6);
+#endif
+            }
+            free(host);
+        }
+    }
+    else
+    {
+#if HAVE_INET6
+        ent = gethostbyname2(myname, AF_INET6);
+        if (ent == NULL)
+        {
+            ent = gethostbyname2(myname, AF_INET);
+        }
+#else
+        ent = gethostbyname(myname, AF_INET6);
+#endif
+    }
+
+    if (tmp != NULL)
+    {
+        free(tmp);
+    }
+
+    if (ent != NULL)
+    {
+#if HAVE_INET6
+        if (ent->h_addrtype == AF_INET6)
+        {
+            struct sockaddr_in6* a = calloc(1, sizeof(struct sockaddr_in6));
+            if (a == NULL)
+                return NULL;
+            a->sin6_family = AF_INET6;
+            memcpy(&(a->sin6_addr), ent->h_addr, sizeof(struct in6_addr));
+            a->sin6_port = 0;
+            if (addrlen != NULL) *addrlen = sizeof(struct sockaddr_in6);
+            return (struct sockaddr*)a;
+        }
+#endif
+        if (ent->h_addrtype == AF_INET)
+        {
+            struct sockaddr_in* a = calloc(1, sizeof(struct sockaddr_in));
+            if (a == NULL)
+                return NULL;
+            a->sin_family = AF_INET;
+            memcpy(&(a->sin_addr), ent->h_addr, sizeof(struct in_addr));
+            a->sin_port = 0;
+            if (addrlen != NULL) *addrlen = sizeof(struct sockaddr_in);
+            return (struct sockaddr*)a;
+        }
+    }
+
+    /* Should really not happen */
+    return parse_addr(IPV4_ANY, 0, addrlen, false);
 }
 
 bool socket_samehost(const struct sockaddr* a1, socklen_t a1len,
