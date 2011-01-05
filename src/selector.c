@@ -183,6 +183,7 @@ bool selector_tick(selector_t selector, unsigned long timeout_ms)
         {
             selector->tick_pos = i;
             c->read_callback(c->userdata, c->sock);
+            c = selector->client + i;
             --ret;
             if (ret > 0 && c->write_callback &&
                 FD_ISSET(c->sock, &active_write_set))
@@ -191,6 +192,7 @@ bool selector_tick(selector_t selector, unsigned long timeout_ms)
                 if (!c->delete)
                 {
                     c->write_callback(c->userdata, c->sock);
+                    c = selector->client + i;
                 }
             }
         }
@@ -198,6 +200,7 @@ bool selector_tick(selector_t selector, unsigned long timeout_ms)
         {
             selector->tick_pos = i;
             c->write_callback(c->userdata, c->sock);
+            c = selector->client + i;
             --ret;
         }
     }
