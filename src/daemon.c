@@ -1113,6 +1113,12 @@ static void daemon_add_remote(daemon_t daemon, server_t* server,
         free(host);
         return;
     }
+    if (addr_is_any(host, hostlen))
+    {
+        /* This won't do, we need an actual address */
+        free(host);
+        host = socket_getlocalhost(remote.sock, &hostlen);
+    }
     if (!parse_location(new_service->location, &proto, NULL, NULL, &path))
     {
         log_printf(daemon->log, LVL_WARN, "Unable to parse location: %s",
