@@ -64,7 +64,7 @@ http_resp_t resp_new(unsigned int code, const char* status,
     http_resp_t resp = calloc(1, sizeof(struct _http_resp_t));
     if (resp == NULL)
         return resp;
-    pkg_init(&(resp->pkg), "%u %s HTTP/%s", code, status, version);
+    pkg_init(&(resp->pkg), "HTTP/%s %u %s", version, code, status);
     return resp;
 }
 
