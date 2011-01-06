@@ -148,23 +148,25 @@ const char* buf_rptr(buf_t buf, size_t* avail)
 
 size_t buf_rmove(buf_t buf, size_t size)
 {
-    if (size == 0)
-    {
-        return buf_ravail(buf);
-    }
-
-    buf->full = false;
     if (buf->wptr > buf->rptr)
     {
         assert(buf->wptr >= buf->rptr + size);
-        buf->rptr += size;
+        if (size > 0)
+        {
+            buf->full = false;
+            buf->rptr += size;
+        }
         return buf->wptr - buf->rptr;
     }
     else
     {
         assert(buf->rptr != buf->wptr || buf->full);
         assert(buf->rptr + size <= buf->end);
-        buf->rptr += size;
+        if (size > 0)
+        {
+            buf->full = false;
+            buf->rptr += size;
+        }
         if (buf->rptr == buf->end)
         {
             buf->rptr = buf->data;
