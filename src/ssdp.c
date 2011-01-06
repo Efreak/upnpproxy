@@ -9,6 +9,13 @@
 #include <strings.h>
 #include <stdio.h>
 
+typedef struct _inet_t
+{
+    socket_t rsock, wsock;
+    struct sockaddr* notify_host;
+    socklen_t notify_hostlen;
+} inet_t;
+
 struct _ssdp_t
 {
     log_t log;
@@ -18,14 +25,18 @@ struct _ssdp_t
     ssdp_search_response_callback_t search_response_cb;
     ssdp_notify_callback_t notify_cb;
 
-    struct sockaddr* notify_host;
-    socklen_t notify_hostlen;
+    struct sockaddr* addrbuf;
+    socklen_t addrbuflen, addrbufsize;
 
-    socket_t rsock_4, wsock_4;
-    socket_t rsock_6, wsock_6;
+    inet_t inet4, inet6;
 };
 
 static void read_data(void* userdata, socket_t sock);
+static void inet_setup(ssdp_t ssdp, const char* name, inet_t* inet,
+                       bool bind, const char* bindaddr,
+                       const char* any, const char* mcast,
+                       uint16_t port);
+static void inet_free(ssdp_t ssdp, inet_t* inet);
 
 ssdp_t ssdp_new(log_t log,
                 selector_t selector, const char* bindaddr, void* userdata,
@@ -46,132 +57,167 @@ ssdp_t ssdp_new(log_t log,
     ssdp->search_response_cb = search_response_callback;
     ssdp->notify_cb = notify_callback;
 
-    if (bindaddr != NULL)
+    inet_setup(ssdp, "IPv4", &(ssdp->inet4),
+               bindaddr == NULL || addrstr_is_ipv4(bindaddr), bindaddr,
+               IPV4_ANY, "239.255.255.250", 1900);
+    inet_setup(ssdp, "IPv6", &(ssdp->inet6),
+               bindaddr == NULL || addrstr_is_ipv6(bindaddr), bindaddr,
+               IPV6_ANY, "FF02::C", 1900);
+
+    if (ssdp->inet4.rsock < 0 && ssdp->inet6.rsock < 0)
     {
-        ssdp->rsock_4 = -1;
-        ssdp->rsock_6 = -1;
-        if (addrstr_is_ipv4(bindaddr))
+        log_puts(log, LVL_ERR, "Unable to join any of IPv4 or IPv6 SSDP multicast group");
+        inet_free(ssdp, &ssdp->inet4);
+        inet_free(ssdp, &ssdp->inet6);
+        free(ssdp);
+        return NULL;
+    }
+
+    if (ssdp->inet4.wsock < 0 && ssdp->inet6.wsock < 0)
+    {
+        log_puts(log, LVL_ERR, "Unable to setup sending IPv4 or IPv6 SSDP multicast group");
+        inet_free(ssdp, &ssdp->inet4);
+        inet_free(ssdp, &ssdp->inet6);
+        free(ssdp);
+        return NULL;
+    }
+
+    ssdp->addrbuf = socket_allocate_addrbuffer(&(ssdp->addrbufsize));
+
+    return ssdp;
+}
+
+void inet_free(ssdp_t ssdp, inet_t* inet)
+{
+    if (inet->rsock >= 0)
+    {
+        selector_remove(ssdp->selector, inet->rsock);
+        socket_close(inet->rsock);
+        inet->rsock = -1;
+    }
+    if (inet->wsock >= 0)
+    {
+        selector_remove(ssdp->selector, inet->wsock);
+        socket_close(inet->wsock);
+        inet->wsock = -1;
+    }
+    free(inet->notify_host);
+}
+
+void inet_setup(ssdp_t ssdp, const char* name, inet_t* inet,
+                bool bind,
+                const char* bindaddr, const char* any, const char* mcast,
+                uint16_t port)
+{
+    if (bind)
+    {
+        inet->rsock = socket_udp_listen(any, port);
+        if (inet->rsock >= 0)
         {
-            ssdp->rsock_4 = socket_udp_listen(IPV4_ANY, 1900);
-            if (ssdp->rsock_4 >= 0)
+            if (!socket_multicast_join(inet->rsock, mcast, bindaddr))
             {
-                if (!socket_setblocking(ssdp->rsock_4, false) ||
-                    !socket_multicast_join(ssdp->rsock_4, "239.255.255.250",
-                                           bindaddr))
-                {
-                    log_printf(log, LVL_WARN, "Error joining ipv4 multicast group (239.255.255.250): %s", socket_strerror(ssdp->rsock_4));
-                    socket_close(ssdp->rsock_4);
-                    ssdp->rsock_4 = -1;
-                }
+                log_printf(ssdp->log, LVL_WARN,
+                           "Error joining %s multicast group (%s): %s",
+                           name, mcast, socket_strerror(inet->rsock));
+                socket_close(inet->rsock);
+                inet->rsock = -1;
             }
             else
             {
-                log_printf(log, LVL_WARN, "Error listening on *:1900 ipv4: %s", socket_strerror(ssdp->rsock_4));
+                selector_add(ssdp->selector, inet->rsock, ssdp,
+                             read_data, NULL);
             }
         }
-        if (addrstr_is_ipv6(bindaddr))
+        else
         {
-            ssdp->rsock_6 = socket_udp_listen(IPV6_ANY, 1900);
-            if (ssdp->rsock_6 >= 0)
-            {
-                if (!socket_setblocking(ssdp->rsock_6, false) ||
-                    !socket_multicast_join(ssdp->rsock_6, "FF02::C", bindaddr))
-                {
-                    log_printf(log, LVL_WARN, "Error joining ipv6 multicast group (FF02::C): %s", socket_strerror(ssdp->rsock_6));
-                    socket_close(ssdp->rsock_6);
-                    ssdp->rsock_6 = -1;
-                }
-            }
-            else
-            {
-                log_printf(log, LVL_WARN, "Error listening on *:1900 ipv6: %s", socket_strerror(ssdp->rsock_6));
-            }
+            log_printf(ssdp->log, LVL_WARN, "Error listening on *:%u %s: %s",
+                       port, name, socket_strerror(inet->rsock));
         }
     }
     else
     {
-        ssdp->rsock_4 = socket_udp_listen(IPV4_ANY, 1900);
-        if (ssdp->rsock_4 >= 0)
-        {
-            if (!socket_setblocking(ssdp->rsock_4, false) ||
-                !socket_multicast_join(ssdp->rsock_4, "239.255.255.250", NULL))
-            {
-                log_printf(log, LVL_WARN, "Error joining ipv4 multicast group (239.255.255.250): %s", socket_strerror(ssdp->rsock_4));
-                socket_close(ssdp->rsock_4);
-                ssdp->rsock_4 = -1;
-            }
-        }
-
-        ssdp->rsock_6 = socket_udp_listen(IPV6_ANY, 1900);
-        if (ssdp->rsock_6 >= 0)
-        {
-            if (!socket_setblocking(ssdp->rsock_6, false) ||
-                !socket_multicast_join(ssdp->rsock_6, "FF02::C", NULL))
-            {
-                log_printf(log, LVL_WARN, "Error joining ipv6 multicast group (FF02::C): %s", socket_strerror(ssdp->rsock_6));
-                socket_close(ssdp->rsock_6);
-                ssdp->rsock_6 = -1;
-            }
-        }
+        inet->rsock = -1;
     }
 
-    if (ssdp->rsock_4 < 0 && ssdp->rsock_6 < 0)
+    inet->wsock = socket_udp_listen(any, 0);
+    if (inet->wsock >= 0)
     {
-        log_puts(log, LVL_ERR, "Unable to join any of IPv4 or IPv6 SSDP multicast group");
-        free(ssdp);
-        return NULL;
+        socket_multicast_setttl(inet->wsock, 1);
+        selector_add(ssdp->selector, inet->wsock, ssdp, read_data, NULL);
     }
 
-    ssdp->wsock_4 = socket_udp_connect("239.255.255.250", 1900, true);
-    ssdp->wsock_6 = socket_udp_connect("FF02::C", 1900, true);
-
-    if (ssdp->wsock_4 < 0 && ssdp->wsock_6 < 0)
-    {
-        log_puts(log, LVL_ERR, "Unable to setup sending IPv4 or IPv6 SSDP multicast group");
-        socket_close(ssdp->rsock_4);
-        socket_close(ssdp->rsock_6);
-        free(ssdp);
-        return NULL;
-    }
-
-    if (ssdp->wsock_4 >= 0)
-    {
-        socket_multicast_setttl(ssdp->wsock_4, 1);
-    }
-    if (ssdp->wsock_6 >= 0)
-    {
-        socket_multicast_setttl(ssdp->wsock_6, 1);
-    }
-
-    if (ssdp->rsock_4 >= 0)
-    {
-        selector_add(selector, ssdp->rsock_4, ssdp, read_data, NULL);
-
-        ssdp->notify_host = parse_addr("239.255.255.250", 1900,
-                                       &ssdp->notify_hostlen, true);
-    }
-    if (ssdp->rsock_6 >= 0)
-    {
-        selector_add(selector, ssdp->rsock_6, ssdp, read_data, NULL);
-
-        if (ssdp->notify_host == NULL)
-        {
-            ssdp->notify_host = parse_addr("FF02::C", 1900,
-                                           &ssdp->notify_hostlen, true);
-        }
-    }
-
-    return ssdp;
+    inet->notify_host = parse_addr(mcast, port, &(inet->notify_hostlen), false);
 }
 
 struct sockaddr* ssdp_getnotifyhost(ssdp_t ssdp, socklen_t* hostlen)
 {
     struct sockaddr* addr;
-    if (hostlen != NULL)
-        *hostlen = ssdp->notify_hostlen;
-    addr = calloc(1, ssdp->notify_hostlen);
-    memcpy(addr, ssdp->notify_host, ssdp->notify_hostlen);
+    inet_t* inet;
+    if (ssdp->inet4.rsock >= 0)
+    {
+        inet = &ssdp->inet4;
+    }
+    else if (ssdp->inet6.rsock >= 0)
+    {
+        inet = &ssdp->inet6;
+    }
+    else
+    {
+        if (hostlen != NULL) *hostlen = 0;
+        return NULL;
+    }
+    if (hostlen != NULL) *hostlen = inet->notify_hostlen;
+    addr = calloc(1, inet->notify_hostlen);
+    memcpy(addr, inet->notify_host, inet->notify_hostlen);
     return addr;
+}
+
+static inet_t* select_inet(ssdp_t ssdp, const struct sockaddr* host, socklen_t hostlen)
+{
+    if (addr_is_ipv4(host, hostlen))
+    {
+        return &ssdp->inet4;
+    }
+    if (addr_is_ipv6(host, hostlen))
+    {
+        return &ssdp->inet6;
+    }
+    return NULL;
+}
+
+bool ssdp_search(ssdp_t ssdp, ssdp_search_t* search)
+{
+    char* tmp;
+    http_req_t req;
+    inet_t* inet;
+    bool ret;
+    assert(search && search->st && search->host);
+    inet = select_inet(ssdp, search->host, search->hostlen);
+    if (inet == NULL || inet->wsock < 0)
+    {
+        return false;
+    }
+    req = req_new("M-SEARCH", "*", "1.1");
+    if (req == NULL)
+    {
+        return false;
+    }
+    asprinthost(&tmp, search->host, search->hostlen);
+    req_addheader(req, "Host", tmp);
+    free(tmp);
+    if (search->s != NULL)
+    {
+        req_addheader(req, "S", search->s);
+    }
+    req_addheader(req, "ST", search->st);
+    req_addheader(req, "Man", "\"ssdp:discover\"");
+    asprintf(&tmp, "%u", search->mx);
+    req_addheader(req, "MX", tmp);
+    free(tmp);
+    ret = req_send(req, inet->wsock, inet->notify_host, inet->notify_hostlen,
+                   ssdp->log);
+    req_free(req);
+    return ret;
 }
 
 bool ssdp_search_response(ssdp_t ssdp, ssdp_search_t* search,
@@ -180,13 +226,11 @@ bool ssdp_search_response(ssdp_t ssdp, ssdp_search_t* search,
     char* tmp;
     http_resp_t resp;
     bool ret;
-    assert(search && notify && search->host && search->st &&
+    inet_t* inet;
+    assert(search && notify && search->host && search->st && search->sender &&
            notify->expires >= time(NULL) && notify->usn);
-    if (addr_is_ipv4(search->host, search->hostlen) && ssdp->wsock_4 < 0)
-    {
-        return false;
-    }
-    if (addr_is_ipv6(search->host, search->hostlen) && ssdp->wsock_6 < 0)
+    inet = select_inet(ssdp, search->sender, search->senderlen);
+    if (inet == NULL || inet->wsock < 0)
     {
         return false;
     }
@@ -207,14 +251,8 @@ bool ssdp_search_response(ssdp_t ssdp, ssdp_search_t* search,
     resp_addheader(resp, "ST", search->st);
     resp_addheader(resp, "USN", notify->usn);
     resp_addheader(resp, "Location", notify->location);
-    if (addr_is_ipv4(search->host, search->hostlen))
-    {
-        ret = resp_send(resp, ssdp->wsock_4, ssdp->log);
-    }
-    else
-    {
-        ret = resp_send(resp, ssdp->wsock_6, ssdp->log);
-    }
+    ret = resp_send(resp, inet->wsock, search->sender, search->senderlen,
+                    ssdp->log);
     resp_free(resp);
     return ret;
 }
@@ -224,13 +262,11 @@ bool ssdp_notify(ssdp_t ssdp, ssdp_notify_t* notify)
     char* tmp;
     http_req_t req;
     bool ret;
+    inet_t* inet;
     assert(notify && notify->host && notify->nt && notify->usn
            && notify->location && notify->expires >= time(NULL));
-    if (addr_is_ipv4(notify->host, notify->hostlen) && ssdp->wsock_4 < 0)
-    {
-        return false;
-    }
-    if (addr_is_ipv6(notify->host, notify->hostlen) && ssdp->wsock_6 < 0)
+    inet = select_inet(ssdp, notify->host, notify->hostlen);
+    if (inet == NULL || inet->wsock < 0)
     {
         return false;
     }
@@ -252,14 +288,8 @@ bool ssdp_notify(ssdp_t ssdp, ssdp_notify_t* notify)
     if (notify->server != NULL)
         req_addheader(req, "Server", notify->server);
     free(tmp);
-    if (addr_is_ipv4(notify->host, notify->hostlen))
-    {
-        ret = req_send(req, ssdp->wsock_4, ssdp->log);
-    }
-    else
-    {
-        ret = req_send(req, ssdp->wsock_6, ssdp->log);
-    }
+    ret = req_send(req, inet->wsock, inet->notify_host, inet->notify_hostlen,
+                   ssdp->log);
     req_free(req);
     return ret;
 }
@@ -269,12 +299,10 @@ bool ssdp_byebye(ssdp_t ssdp, ssdp_notify_t* notify)
     char* tmp;
     http_req_t req;
     bool ret;
+    inet_t* inet;
     assert(notify && notify->host && notify->nt && notify->usn);
-    if (addr_is_ipv4(notify->host, notify->hostlen) && ssdp->wsock_4 < 0)
-    {
-        return false;
-    }
-    if (addr_is_ipv6(notify->host, notify->hostlen) && ssdp->wsock_6 < 0)
+    inet = select_inet(ssdp, notify->host, notify->hostlen);
+    if (inet == NULL || inet->wsock < 0)
     {
         return false;
     }
@@ -289,14 +317,8 @@ bool ssdp_byebye(ssdp_t ssdp, ssdp_notify_t* notify)
     req_addheader(req, "NT", notify->nt);
     req_addheader(req, "NTS", "ssdp:byebye");
     req_addheader(req, "USN", notify->usn);
-    if (addr_is_ipv4(notify->host, notify->hostlen))
-    {
-        ret = req_send(req, ssdp->wsock_4, ssdp->log);
-    }
-    else
-    {
-        ret = req_send(req, ssdp->wsock_6, ssdp->log);
-    }
+    ret = req_send(req, inet->wsock, inet->notify_host, inet->notify_hostlen,
+                   ssdp->log);
     req_free(req);
     return ret;
 }
@@ -306,25 +328,9 @@ void ssdp_free(ssdp_t ssdp)
     if (ssdp == NULL)
         return;
 
-    if (ssdp->rsock_4 >= 0)
-    {
-        selector_remove(ssdp->selector, ssdp->rsock_4);
-        socket_close(ssdp->rsock_4);
-    }
-    if (ssdp->rsock_6 >= 0)
-    {
-        selector_remove(ssdp->selector, ssdp->rsock_6);
-        socket_close(ssdp->rsock_6);
-    }
-    if (ssdp->wsock_4 >= 0)
-    {
-        socket_close(ssdp->wsock_4);
-    }
-    if (ssdp->wsock_6 >= 0)
-    {
-        socket_close(ssdp->wsock_6);
-    }
-    free(ssdp->notify_host);
+    inet_free(ssdp, &ssdp->inet4);
+    inet_free(ssdp, &ssdp->inet6);
+    free(ssdp->addrbuf);
     free(ssdp);
 }
 
@@ -383,103 +389,78 @@ static bool parse_host(char* str, struct sockaddr** addr,
 void read_data(void* userdata, socket_t sock)
 {
     ssdp_t ssdp = (ssdp_t)userdata;
-    char* ptr;
-    size_t fill = 0, size;
+    size_t fill;
     char buf[2048];
     ssize_t got;
     char* line, * next;
     ssdp_search_t search_data = {0,};
     ssdp_notify_t notify_data = {0,};
     bool search = false, err = false, notify = false;
+    bool expect_search_response = false;
 
-    ptr = buf;
-    size = sizeof(buf);
-
-    for (;;)
+    if (sock == ssdp->inet4.wsock || sock == ssdp->inet6.wsock)
     {
-        size_t avail = size - fill;
-        got = socket_read(sock, ptr + fill, avail);
-        if (got < 0)
-        {
-            if (socket_blockingerror(sock))
-            {
-                return;
-            }
-            log_printf(ssdp->log, LVL_ERR, "Error reading from SSDP UDP multicast socket: %s", socket_strerror(sock));
-            selector_remove(ssdp->selector, sock);
-            if (sock == ssdp->rsock_4)
-            {
-                ssdp->rsock_4 = -1;
-            }
-            else if (sock == ssdp->rsock_6)
-            {
-                ssdp->rsock_6 = -1;
-            }
-            socket_close(sock);
-            return;
-        }
-        if (got == 0 && fill == 0)
-        {
-            return;
-        }
-        fill += got;
-        if (got < avail)
-        {
-            break;
-        }
-        if (ptr == buf)
-        {
-            size_t ns = size * 2;
-            char* tmp = malloc(ns);
-            if (tmp == NULL)
-            {
-                return;
-            }
-            memcpy(tmp, ptr, fill);
-            ptr = tmp;
-            size = ns;
-        }
-        else
-        {
-            size_t ns = size * 2;
-            char* tmp = realloc(ptr, ns);
-            if (tmp == NULL)
-            {
-                free(ptr);
-                return;
-            }
-            ptr = tmp;
-            size = ns;
-        }
+        expect_search_response = true;
     }
+
+    ssdp->addrbuflen = ssdp->addrbufsize;
+    got = socket_udp_read(sock, buf, sizeof(buf),
+                          ssdp->addrbuf, &(ssdp->addrbuflen));
+    if (got < 0)
+    {
+        log_printf(ssdp->log, LVL_ERR, "Error reading from SSDP UDP multicast socket: %s", socket_strerror(sock));
+        selector_remove(ssdp->selector, sock);
+        if (sock == ssdp->inet4.wsock)
+        {
+            ssdp->inet4.wsock = -1;
+        }
+        else if (sock == ssdp->inet4.rsock)
+        {
+            ssdp->inet4.rsock = -1;
+        }
+        else if (sock == ssdp->inet6.wsock)
+        {
+            ssdp->inet6.wsock = -1;
+        }
+        else if (sock == ssdp->inet6.rsock)
+        {
+            ssdp->inet6.rsock = -1;
+        }
+        socket_close(sock);
+        return;
+    }
+    if (got == 0)
+    {
+        return;
+    }
+    fill = got;
 
     if (fill < 4)
     {
         /* Not a HTTP(-like) request */
-        if (ptr != buf) free(ptr);
         return;
     }
-    if (memcmp(ptr + (fill - 4), "\r\n\r\n", 4) != 0)
+    if (memcmp(buf + (fill - 4), "\r\n\r\n", 4) != 0)
     {
         /* Either not a HTTP(-like) request or it has a body */
-        ptr[fill - 1] = '\0';
-        line = strstr(ptr, "\r\n\r\n");
+        buf[fill - 1] = '\0';
+        line = strstr(buf, "\r\n\r\n");
         if (line == NULL)
         {
             /* Not a HTTP(-like) request */
-            if (ptr != buf) free(ptr);
             return;
         }
         /* Cut off the body, we're not interested */
-        fill = (line + 2) - ptr;
-        ptr[fill] = '\0';
+        fill = (line + 2) - buf;
+        buf[fill] = '\0';
     }
     else
     {
         fill -= 2;
-        ptr[fill] = '\0';
+        buf[fill] = '\0';
     }
-    line = ptr;
+    line = buf;
+
     for (;;)
     {
         if (*line == '\0')
@@ -493,27 +474,35 @@ void read_data(void* userdata, socket_t sock)
             break;
         }
         *next = '\0';
-        if (line == ptr)
+        if (line == buf)
         {
             /* First line must be either M-SEARCH, NOTIFY req or
              * a M-SEARCH response */
-            if (strcmp(line, "M-SEARCH * HTTP/1.1") == 0)
+            if (expect_search_response)
             {
-                search = true;
-            }
-            else if (strcmp(line, "NOTIFY * HTTP/1.1") == 0)
-            {
-                notify = true;
-            }
-            else if (strcmp(line, "HTTP/1.1 200 OK") == 0)
-            {
-                search = true;
-                notify = true;
+                if (strcmp(line, "HTTP/1.1 200 OK") == 0)
+                {
+                    search = true;
+                    notify = true;
+                    search_data.sender = ssdp->addrbuf;
+                    search_data.senderlen = ssdp->addrbuflen;
+                }
             }
             else
             {
-                err = true;
-                break;
+                if (strcmp(line, "M-SEARCH * HTTP/1.1") == 0)
+                {
+                    search = true;
+                }
+                else if (strcmp(line, "NOTIFY * HTTP/1.1") == 0)
+                {
+                    notify = true;
+                }
+                else
+                {
+                    err = true;
+                    break;
+                }
             }
         }
         else
@@ -556,6 +545,20 @@ void read_data(void* userdata, socket_t sock)
                         err = true;
                         break;
                     }
+                    known = true;
+                }
+                else if (strcasecmp(key, "MX") == 0)
+                {
+                    unsigned long tmp;
+                    char* end;
+                    errno = 0;
+                    tmp = strtoul(value, &end, 10);
+                    if (errno || end == NULL || *end != '\0')
+                    {
+                        err = true;
+                        break;
+                    }
+                    search_data.mx = (uint)tmp;
                     known = true;
                 }
                 else if (strcasecmp(key, "ST") == 0)
@@ -676,7 +679,4 @@ void read_data(void* userdata, socket_t sock)
 
     free(search_data.host);
     free(notify_data.host);
-
-    if (ptr != buf)
-        free(ptr);
 }

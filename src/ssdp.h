@@ -12,7 +12,10 @@ typedef struct _ssdp_search_t
 {
     struct sockaddr* host;
     socklen_t hostlen;
+    struct sockaddr* sender;
+    socklen_t senderlen;
     char* s, * st;
+    uint mx;
 } ssdp_search_t;
 
 typedef struct _ssdp_notify_t
@@ -41,6 +44,7 @@ ssdp_t ssdp_new(log_t log,
 
 struct sockaddr* ssdp_getnotifyhost(ssdp_t ssdp, socklen_t* hostlen);
 
+bool ssdp_search(ssdp_t ssdp, ssdp_search_t* search);
 bool ssdp_search_response(ssdp_t ssdp, ssdp_search_t* search,
                           ssdp_notify_t* notify);
 bool ssdp_notify(ssdp_t ssdp, ssdp_notify_t* notify);

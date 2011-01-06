@@ -542,6 +542,11 @@ static void daemon_ssdp_search_cb(void* userdata, ssdp_search_t* search)
 {
     daemon_t daemon = (daemon_t)userdata;
     size_t i;
+    if (search->s != NULL && strcmp(search->s, daemon->ssdp_s) == 0)
+    {
+        /* Don't answer our own searches */
+        return;
+    }
     for (i = map_begin(daemon->remotes); i != map_end(daemon->remotes);
          i = map_next(daemon->remotes, i))
     {
@@ -653,11 +658,6 @@ static void daemon_ssdp_search_resp_cb(void* userdata, ssdp_search_t* search,
     size_t i;
     bool reset_nt = false;
     assert(search->st && notify->usn);
-    if (search->s == NULL || strcmp(search->s, daemon->ssdp_s) != 0)
-    {
-        /* Not a response to my search */
-        return;
-    }
     if (notify->nt == NULL)
     {
         notify->nt = search->st;
@@ -711,6 +711,7 @@ static void daemon_ssdp_notify_cb(void* userdata, ssdp_notify_t* notify)
 
 static bool daemon_setup_ssdp(daemon_t daemon)
 {
+    ssdp_search_t search;
     assert(daemon->selector != NULL && daemon->ssdp == NULL);
     daemon->ssdp = ssdp_new(daemon->log,
                             daemon->selector, daemon->bind_multicast,
@@ -721,6 +722,15 @@ static bool daemon_setup_ssdp(daemon_t daemon)
     {
         log_puts(daemon->log, LVL_ERR, "Failed to setup SSDP");
         return false;
+    }
+    search.host = ssdp_getnotifyhost(daemon->ssdp, &search.hostlen);
+    if (search.host != NULL)
+    {
+        search.s = daemon->ssdp_s;
+        search.st = (char*)"upnp:rootdevice";
+        search.mx = 3;
+        ssdp_search(daemon->ssdp, &search);
+        free(search.host);
     }
     return true;
 }
@@ -1787,7 +1797,7 @@ void daemon_reload_cb(int signum)
 
 static char* daemon_generate_uid(daemon_t daemon)
 {
-    char* uid = calloc(40, 1);
+    char* uid = calloc(45, 1);
     if (uuid_is_null(daemon->uuid))
     {
         const char* dir = getenv("XDG_CACHE_HOME");
@@ -1877,7 +1887,8 @@ static char* daemon_generate_uid(daemon_t daemon)
 
         free(tmp);
     }
-    uuid_unparse_lower(daemon->uuid, uid);
+    memcpy(uid, "uuid:", 5);
+    uuid_unparse_lower(daemon->uuid, uid + 5);
     return uid;
 }
 
