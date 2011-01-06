@@ -150,7 +150,7 @@ size_t buf_rmove(buf_t buf, size_t size)
 {
     if (size == 0)
     {
-        return;
+        return buf_ravail(buf);
     }
 
     buf->full = false;
