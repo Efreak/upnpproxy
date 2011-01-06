@@ -1106,12 +1106,6 @@ static void tunnel_read_cb(void* userdata, socket_t sock)
             break;
         }
         buf_wmove(tunnel->in, ret);
-        /*
-        if (ret < avail)
-        {
-            break;
-        }
-        */
     }
 
     daemon_tunnel_flush_input(tunnel);
