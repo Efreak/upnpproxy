@@ -652,8 +652,8 @@ static void daemon_ssdp_search_resp_cb(void* userdata, ssdp_search_t* search,
     daemon_t daemon = (daemon_t)userdata;
     size_t i;
     bool reset_nt = false;
-    assert(search->s && search->st && notify->usn);
-    if (strcmp(search->s, daemon->ssdp_s) != 0)
+    assert(search->st && notify->usn);
+    if (search->s == NULL || strcmp(search->s, daemon->ssdp_s) != 0)
     {
         /* Not a response to my search */
         return;
