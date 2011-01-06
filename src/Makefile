@@ -16,7 +16,7 @@ daemon.o: daemon.c common.h ssdp.h selector.h socket.h
 ssdp.o: ssdp.c common.h ssdp.h selector.h socket.h http.h util.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-ssdp_mon: ssdp_mon.o ssdp.o selector.o timeval.o socket.o http.o util.o log.o
+ssdp_mon: ssdp_mon.o ssdp.o selector.o timeval.o socket.o http.o util.o log.o vector.o timers.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 ssdp_mon.o: ssdp_mon.c common.h ssdp.h selector.h socket.h

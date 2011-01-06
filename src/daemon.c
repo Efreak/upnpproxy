@@ -550,16 +550,18 @@ static void daemon_ssdp_search_cb(void* userdata, ssdp_search_t* search)
 {
     daemon_t daemon = (daemon_t)userdata;
     size_t i;
+    bool any;
     if (search->s != NULL && strcmp(search->s, daemon->ssdp_s) == 0)
     {
         /* Don't answer our own searches */
         return;
     }
+    any = (strcmp(search->st, "ssdp:all") == 0);
     for (i = map_begin(daemon->remotes); i != map_end(daemon->remotes);
          i = map_next(daemon->remotes, i))
     {
         remoteservice_t* remote = map_getat(daemon->remotes, i);
-        if (strcmp(search->st, remote->notify.nt) == 0)
+        if (any || strcmp(search->st, remote->notify.nt) == 0)
         {
             ssdp_search_response(daemon->ssdp, search, &(remote->notify));
         }
@@ -730,7 +732,9 @@ static bool daemon_setup_ssdp(daemon_t daemon)
     ssdp_search_t search;
     assert(daemon->selector != NULL && daemon->ssdp == NULL);
     daemon->ssdp = ssdp_new(daemon->log,
-                            daemon->selector, daemon->bind_multicast,
+                            daemon->selector,
+                            daemon->timers,
+                            daemon->bind_multicast,
                             daemon, daemon_ssdp_search_cb,
                             daemon_ssdp_search_resp_cb,
                             daemon_ssdp_notify_cb);

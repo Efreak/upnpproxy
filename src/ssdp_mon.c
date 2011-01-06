@@ -31,7 +31,7 @@ int main(int argc, char** argv)
         log_close(log);
         return EXIT_FAILURE;
     }
-    ssdp = ssdp_new(log, selector, NULL, NULL, search_cb, search_resp_cb, notify_cb);
+    ssdp = ssdp_new(log, selector, NULL, NULL, NULL, search_cb, search_resp_cb, notify_cb);
     if (ssdp == NULL)
     {
         fputs("ssdp_mon: Failed to setup SSDP.\n", stderr);

@@ -3,6 +3,7 @@
 #include "ssdp.h"
 #include "http.h"
 #include "util.h"
+#include "vector.h"
 #include <time.h>
 #include <errno.h>
 #include <string.h>
@@ -20,6 +21,7 @@ struct _ssdp_t
 {
     log_t log;
     selector_t selector;
+    timers_t timers;
     void* userdata;
     ssdp_search_callback_t search_cb;
     ssdp_search_response_callback_t search_response_cb;
@@ -29,7 +31,19 @@ struct _ssdp_t
     socklen_t addrbuflen, addrbufsize;
 
     inet_t inet4, inet6;
+
+    vector_t search_responses;
 };
+
+typedef struct _search_response_t
+{
+    ssdp_t ssdp;
+    http_resp_t resp;
+    inet_t* inet;
+    struct sockaddr* sender;
+    socklen_t senderlen;
+    timecb_t timer;
+} search_response_t;
 
 static void read_data(void* userdata, socket_t sock);
 static void inet_setup(ssdp_t ssdp, const char* name, inet_t* inet,
@@ -38,8 +52,8 @@ static void inet_setup(ssdp_t ssdp, const char* name, inet_t* inet,
                        uint16_t port);
 static void inet_free(ssdp_t ssdp, inet_t* inet);
 
-ssdp_t ssdp_new(log_t log,
-                selector_t selector, const char* bindaddr, void* userdata,
+ssdp_t ssdp_new(log_t log, selector_t selector, timers_t timers,
+                const char* bindaddr, void* userdata,
                 ssdp_search_callback_t search_callback,
                 ssdp_search_response_callback_t search_response_callback,
                 ssdp_notify_callback_t notify_callback)
@@ -52,6 +66,7 @@ ssdp_t ssdp_new(log_t log,
     }
     ssdp->log = log;
     ssdp->selector = selector;
+    ssdp->timers = timers;
     ssdp->userdata = userdata;
     ssdp->search_cb = search_callback;
     ssdp->search_response_cb = search_response_callback;
@@ -83,6 +98,9 @@ ssdp_t ssdp_new(log_t log,
     }
 
     ssdp->addrbuf = socket_allocate_addrbuffer(&(ssdp->addrbufsize));
+
+    ssdp->search_responses = vector_new(sizeof(search_response_t) +
+                                        ssdp->addrbufsize);
 
     return ssdp;
 }
@@ -220,6 +238,18 @@ bool ssdp_search(ssdp_t ssdp, ssdp_search_t* search)
     return ret;
 }
 
+static long search_response_cb(void* userdata)
+{
+    search_response_t* search_response = userdata;
+    resp_send(search_response->resp, search_response->inet->rsock,
+              search_response->sender, search_response->senderlen,
+              search_response->ssdp->log);
+    resp_free(search_response->resp);
+    search_response->resp = NULL;
+    search_response->timer = NULL;
+    return -1;
+}
+
 bool ssdp_search_response(ssdp_t ssdp, ssdp_search_t* search,
                           ssdp_notify_t* notify)
 {
@@ -251,9 +281,42 @@ bool ssdp_search_response(ssdp_t ssdp, ssdp_search_t* search,
     resp_addheader(resp, "ST", search->st);
     resp_addheader(resp, "USN", notify->usn);
     resp_addheader(resp, "Location", notify->location);
-    ret = resp_send(resp, inet->rsock, search->sender, search->senderlen,
-                    ssdp->log);
-    resp_free(resp);
+    if (search->mx <= 0)
+    {
+        ret = resp_send(resp, inet->rsock, search->sender, search->senderlen,
+                        ssdp->log);
+        resp_free(resp);
+    }
+    else
+    {
+        /* Delay response */
+        size_t i;
+        search_response_t* search_response = NULL;
+        for (i = 0; i < vector_size(ssdp->search_responses); ++i)
+        {
+            search_response = vector_get(ssdp->search_responses, i);
+            if (search_response->timer == NULL)
+            {
+                break;
+            }
+            search_response = NULL;
+        }
+        if (search_response == NULL)
+        {
+            search_response = vector_add(ssdp->search_responses);
+            search_response->ssdp = ssdp;
+            search_response->sender = (struct sockaddr*)((char*)search_response + sizeof(search_response_t));
+        }
+
+        search_response->resp = resp;
+        search_response->inet = inet;
+        search_response->senderlen = search->senderlen;
+        memcpy(search_response->sender, search->sender, search->senderlen);
+        search_response->timer = timers_add(ssdp->timers, search->mx * 1000,
+                                            search_response,
+                                            search_response_cb);
+        ret = true;
+    }
     return ret;
 }
 
@@ -325,9 +388,21 @@ bool ssdp_byebye(ssdp_t ssdp, ssdp_notify_t* notify)
 
 void ssdp_free(ssdp_t ssdp)
 {
+    size_t i;
     if (ssdp == NULL)
         return;
 
+    for (i = 0; i < vector_size(ssdp->search_responses); ++i)
+    {
+        search_response_t* search_response = vector_get(ssdp->search_responses, i);
+        if (search_response->timer != NULL)
+        {
+            timecb_cancel(search_response->timer);
+            search_response->timer = NULL;
+            resp_free(search_response->resp);
+        }
+    }
+    vector_free(ssdp->search_responses);
     inet_free(ssdp, &ssdp->inet4);
     inet_free(ssdp, &ssdp->inet6);
     free(ssdp->addrbuf);

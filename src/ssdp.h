@@ -3,6 +3,7 @@
 
 #include "socket.h"
 #include "selector.h"
+#include "timers.h"
 #include "log.h"
 #include <time.h>
 
@@ -36,6 +37,7 @@ typedef void (* ssdp_notify_callback_t)(void* userdata, ssdp_notify_t* notify);
 
 ssdp_t ssdp_new(log_t log,
                 selector_t selector,
+                timers_t timers,
                 const char* bindaddr,
                 void* userdata,
                 ssdp_search_callback_t search_callback,
