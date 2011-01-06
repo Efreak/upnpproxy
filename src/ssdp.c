@@ -241,6 +241,7 @@ bool ssdp_search(ssdp_t ssdp, ssdp_search_t* search)
 static long search_response_cb(void* userdata)
 {
     search_response_t* search_response = userdata;
+    search_response->sender = (struct sockaddr*)((char*)search_response + sizeof(search_response_t));
     resp_send(search_response->resp, search_response->inet->rsock,
               search_response->sender, search_response->senderlen,
               search_response->ssdp->log);
