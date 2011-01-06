@@ -873,7 +873,14 @@ static bool parse_location(const char* location, char** proto,
     {
         *path = strdup(last);
     }
-    pos = strchr(tmp, ':');
+    if (tmp[0] == '[')
+    {
+        pos = strstr(tmp, ']:');
+    }
+    else
+    {
+        pos = strchr(tmp, ':');
+    }
     if (pos == NULL)
     {
         /* TODO: Use proto to check the correct default value */
@@ -883,6 +890,7 @@ static bool parse_location(const char* location, char** proto,
     {
         unsigned long x;
         char* end;
+        if (*pos == ']') ++pos;
         tmp[pos - tmp] = '\0';
         ++pos;
         errno = 0;
