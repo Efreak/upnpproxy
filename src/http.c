@@ -15,7 +15,8 @@ typedef struct _pkg_t
 static void pkg_init(pkg_t pkg, const char* format, ...);
 static void pkg_addheader(pkg_t pkg, const char* key, const char* value);
 static void pkg_addbody(pkg_t pkg, const char* body);
-static bool pkg_send(pkg_t pkg, socket_t sock, log_t log);
+static bool pkg_send(pkg_t pkg, socket_t sock,
+                     struct sockaddr* dst, socklen_t dstlen, log_t log);
 static void pkg_free(pkg_t pkg);
 
 struct _http_req_t
@@ -42,9 +43,10 @@ void req_addbody(http_req_t req, const char* body)
     pkg_addbody(&(req->pkg), body);
 }
 
-bool req_send(http_req_t req, socket_t sock, log_t log)
+bool req_send(http_req_t req, socket_t sock,
+              struct sockaddr* dst, socklen_t dstlen, log_t log)
 {
-    return pkg_send(&(req->pkg), sock, log);
+    return pkg_send(&(req->pkg), sock, dst, dstlen, log);
 }
 
 void req_free(http_req_t req)
@@ -78,9 +80,9 @@ void resp_addbody(http_resp_t resp, const char* body)
     pkg_addbody(&(resp->pkg), body);
 }
 
-bool resp_send(http_resp_t resp, socket_t sock, log_t log)
+bool resp_send(http_resp_t resp, socket_t sock, struct sockaddr* dst, socklen_t dstlen, log_t log)
 {
-    return pkg_send(&(resp->pkg), sock, log);
+    return pkg_send(&(resp->pkg), sock, dst, dstlen, log);
 }
 
 void resp_free(http_resp_t resp)
@@ -146,7 +148,7 @@ void pkg_addbody(pkg_t pkg, const char* body)
     pkg_append(pkg, body);
 }
 
-bool pkg_send(pkg_t pkg, socket_t sock, log_t log)
+bool pkg_send(pkg_t pkg, socket_t sock, struct sockaddr* dst, socklen_t dstlen, log_t log)
 {
     size_t pos = 0;
     ssize_t sent;
@@ -156,7 +158,8 @@ bool pkg_send(pkg_t pkg, socket_t sock, log_t log)
     }
     while (pos < pkg->size)
     {
-        sent = socket_write(sock, pkg->data + pos, pkg->size - pos);
+        sent = socket_udp_write(sock, pkg->data + pos, pkg->size - pos,
+                                dst, dstlen);
         if (sent <= 0)
         {
             log_printf(log, LVL_WARN,
