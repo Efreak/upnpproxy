@@ -1068,8 +1068,10 @@ static void tunnel_read_cb(void* userdata, socket_t sock)
                 break;
             }
 
-            log_printf(daemon->log, LVL_WARN, "%s tunnel socket read failed",
-                       tunnel->remote ? "Remote" : "Local");
+            log_printf(daemon->log, LVL_WARN,
+                       "%s tunnel socket read failed: %s",
+                       tunnel->remote ? "Remote" : "Local",
+                       strerror(tunnel->sock));
             daemon_lost_tunnel(tunnel);
             return;
         }
