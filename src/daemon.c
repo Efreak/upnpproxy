@@ -762,7 +762,13 @@ static bool daemon_setup_ssdp(daemon_t daemon)
         search.st = (char*)"urn:schemas-upnp-org:service:ContentDirectory:2";
         ssdp_search(daemon->ssdp, &search);
 
+        search.st = (char*)"urn:schemas-upnp-org:service:MediaServer:1";
+        ssdp_search(daemon->ssdp, &search);
+
         search.st = (char*)"urn:schemas-wifialliance-org:device:WFADevice:1";
+        ssdp_search(daemon->ssdp, &search);
+
+        search.st = (char*)"ssdp:all";
         ssdp_search(daemon->ssdp, &search);
 
         free(search.host);
@@ -1069,9 +1075,9 @@ static void tunnel_read_cb(void* userdata, socket_t sock)
             }
 
             log_printf(daemon->log, LVL_WARN,
-                       "%s tunnel socket read failed: %s",
+                       "%s tunnel socket read failed: (avail: %lu ret: %ld) %s",
                        tunnel->remote ? "Remote" : "Local",
-                       strerror(tunnel->sock));
+                       strerror(tunnel->sock), avail, ret);
             daemon_lost_tunnel(tunnel);
             return;
         }
@@ -1083,10 +1089,12 @@ static void tunnel_read_cb(void* userdata, socket_t sock)
             break;
         }
         buf_wmove(tunnel->in, ret);
+        /*
         if (ret < avail)
         {
             break;
         }
+        */
     }
 
     daemon_tunnel_flush_input(tunnel);
