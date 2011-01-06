@@ -903,6 +903,15 @@ static bool parse_location(const char* location, char** proto,
     }
     if (host != NULL)
     {
+        if (tmp[0] == '[')
+        {
+            size_t len = strlen(tmp);
+            if (tmp[len - 1] == ']')
+            {
+                memmove(tmp, tmp + 1, len - 2);
+                tmp[len - 2] = '\0';
+            }
+        }
         *host = parse_addr(tmp, port, hostlen, false);
         if (*host == NULL)
         {
@@ -1083,9 +1092,9 @@ static void tunnel_read_cb(void* userdata, socket_t sock)
             }
 
             log_printf(daemon->log, LVL_WARN,
-                       "%s tunnel socket read failed: (avail: %lu ret: %ld) %s",
+                       "%s tunnel socket read failed: %s",
                        tunnel->remote ? "Remote" : "Local",
-                       strerror(tunnel->sock), avail, ret);
+                       socket_strerror(tunnel->sock));
             daemon_lost_tunnel(tunnel);
             return;
         }
