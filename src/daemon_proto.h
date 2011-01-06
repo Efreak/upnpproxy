@@ -28,6 +28,7 @@ typedef struct
 {
     uint32_t service_id;
     uint32_t tunnel_id;
+    char* host;
 } pkg_create_tunnel_t;
 
 /* Can be sent by either daemon to signal that the tunnel now is closed */
@@ -74,7 +75,7 @@ typedef struct
 void pkg_new_service(pkg_t* pkg, uint32_t service_id, char* usn, char* location,
                      char* service, char* server);
 void pkg_old_service(pkg_t* pkg, uint32_t service_id);
-void pkg_create_tunnel(pkg_t* pkg, uint32_t service_id, uint32_t tunnel_id);
+void pkg_create_tunnel(pkg_t* pkg, uint32_t service_id, uint32_t tunnel_id, char* host);
 void pkg_close_tunnel(pkg_t* pkg, uint32_t tunnel_id);
 void pkg_data_tunnel(pkg_t* pkg, uint32_t tunnel_id, void* data, uint32_t len);
 

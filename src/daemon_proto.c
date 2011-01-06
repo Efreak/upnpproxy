@@ -3,6 +3,8 @@
 #include "daemon_proto.h"
 #include <string.h>
 
+static void pkg_freecontent(pkg_t* pkg);
+
 void pkg_new_service(pkg_t* pkg, uint32_t service_id, char* usn, char* location,
                      char* service, char* server)
 {
@@ -21,11 +23,13 @@ void pkg_old_service(pkg_t* pkg, uint32_t service_id)
     pkg->content.old_service.service_id = service_id;
 }
 
-void pkg_create_tunnel(pkg_t* pkg, uint32_t service_id, uint32_t tunnel_id)
+void pkg_create_tunnel(pkg_t* pkg, uint32_t service_id, uint32_t tunnel_id, char* host)
 {
     pkg->type = PKG_CREATE_TUNNEL;
+    assert(host != NULL);
     pkg->content.create_tunnel.service_id = service_id;
     pkg->content.create_tunnel.tunnel_id = tunnel_id;
+    pkg->content.create_tunnel.host = host;
 }
 
 void pkg_close_tunnel(pkg_t* pkg, uint32_t tunnel_id)
@@ -148,7 +152,7 @@ bool pkg_write(buf_t buf, pkg_t* pkg)
         break;
     case PKG_CREATE_TUNNEL:
         pkgtype = 10;
-        pkglen = 8;
+        pkglen = 8 + 2 + strlen(pkg->content.create_tunnel.host);
         break;
     case PKG_CLOSE_TUNNEL:
         pkgtype = 11;
@@ -193,6 +197,7 @@ bool pkg_write(buf_t buf, pkg_t* pkg)
     case PKG_CREATE_TUNNEL:
         write_uint32(&wptr, pkg->content.create_tunnel.service_id);
         write_uint32(&wptr, pkg->content.create_tunnel.tunnel_id);
+        write_str(&wptr, pkg->content.create_tunnel.host);
         write_done(&wptr);
         return true;
     case PKG_CLOSE_TUNNEL:
@@ -426,6 +431,7 @@ bool pkg_peek(buf_t buf, pkg_t* pkg)
             pkg->type = PKG_CREATE_TUNNEL;
             pkg->content.create_tunnel.service_id = read_uint32(&rptr);
             pkg->content.create_tunnel.tunnel_id = read_uint32(&rptr);
+            pkg->content.create_tunnel.host = read_str(&rptr);
             read_done(&rptr);
             return true;
         case 11:
@@ -476,22 +482,7 @@ void pkg_read(buf_t buf, pkg_t* pkg)
 {
     if ((pkg->tmp2 & 0x80) == 0)
     {
-        switch (pkg->type)
-        {
-        case PKG_NEW_SERVICE:
-            free(pkg->content.new_service.usn);
-            free(pkg->content.new_service.location);
-            free(pkg->content.new_service.service);
-            free(pkg->content.new_service.server);
-            break;
-        case PKG_DATA_TUNNEL:
-            free(pkg->content.data_tunnel.data);
-            break;
-        case PKG_OLD_SERVICE:
-        case PKG_CREATE_TUNNEL:
-        case PKG_CLOSE_TUNNEL:
-            break;
-        }
+        pkg_freecontent(pkg);
     }
     pkg->tmp2 &= 0x7f;
     if (pkg->tmp2 == 0)
@@ -543,7 +534,8 @@ pkg_t* pkg_dup(const pkg_t* pkg)
         break;
     case PKG_CREATE_TUNNEL:
         pkg_create_tunnel(ret, pkg->content.create_tunnel.service_id,
-                          pkg->content.create_tunnel.tunnel_id);
+                          pkg->content.create_tunnel.tunnel_id,
+                          pkg->content.create_tunnel.host);
         break;
     case PKG_CLOSE_TUNNEL:
         pkg_close_tunnel(ret, pkg->content.close_tunnel.tunnel_id);
@@ -562,11 +554,8 @@ pkg_t* pkg_dup(const pkg_t* pkg)
     return ret;
 }
 
-void pkg_free(pkg_t* pkg)
+void pkg_freecontent(pkg_t* pkg)
 {
-    if (pkg == NULL)
-        return;
-
     switch (pkg->type)
     {
     case PKG_NEW_SERVICE:
@@ -575,13 +564,23 @@ void pkg_free(pkg_t* pkg)
         free(pkg->content.new_service.service);
         free(pkg->content.new_service.server);
         break;
-    case PKG_OLD_SERVICE:
     case PKG_CREATE_TUNNEL:
+        free(pkg->content.create_tunnel.host);
+        break;
+    case PKG_OLD_SERVICE:
     case PKG_CLOSE_TUNNEL:
         break;
     case PKG_DATA_TUNNEL:
         free(pkg->content.data_tunnel.data);
         break;
     }
+}
+
+void pkg_free(pkg_t* pkg)
+{
+    if (pkg == NULL)
+        return;
+
+    pkg_freecontent(pkg);
     free(pkg);
 }
