@@ -220,8 +220,8 @@ bool selector_tick(selector_t selector, unsigned long timeout_ms)
         else
         {
             --c;
-            --i;
         }
+        --i;
     }
 
     return true;
