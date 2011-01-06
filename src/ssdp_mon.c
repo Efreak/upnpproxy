@@ -78,6 +78,7 @@ void search_cb(void* userdata, ssdp_search_t* search)
     free(tmp);
     if (search->st != NULL)
         fprintf(stdout, "* ST: %s\n", search->st);
+    fprintf(stdout, "* MX: %u\n", search->mx);
 }
 
 void search_resp_cb(void* userdata, ssdp_search_t* search, ssdp_notify_t* notify)
@@ -92,6 +93,10 @@ void search_resp_cb(void* userdata, ssdp_search_t* search, ssdp_notify_t* notify
         fprintf(stdout, "* Location: %s\n", notify->location);
     if (notify->usn != NULL)
         fprintf(stdout, "* USN: %s\n", notify->usn);
+    if (notify->opt != NULL)
+        fprintf(stdout, "* OPT: %s\n", notify->opt);
+    if (notify->nls != NULL)
+        fprintf(stdout, "* 01-NLS: %s\n", notify->nls);
     tmp = malloc(256);
     strftime(tmp, 256, "%a, %d %b %Y %H:%M:%S %z", localtime(&notify->expires));
     fprintf(stdout, "* Expires: %s\n", tmp);
@@ -115,6 +120,10 @@ void notify_cb(void* userdata, ssdp_notify_t* notify)
         fprintf(stdout, "* NT: %s\n", notify->nt);
     if (notify->nts != NULL)
         fprintf(stdout, "* NTS: %s\n", notify->nts);
+    if (notify->opt != NULL)
+        fprintf(stdout, "* OPT: %s\n", notify->opt);
+    if (notify->nls != NULL)
+        fprintf(stdout, "* 01-NLS: %s\n", notify->nls);
     tmp = malloc(256);
     strftime(tmp, 256, "%a, %d %b %Y %H:%M:%S %z", localtime(&notify->expires));
     fprintf(stdout, "* Expires: %s\n", tmp);

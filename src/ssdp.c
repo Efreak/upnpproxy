@@ -305,14 +305,15 @@ bool ssdp_search_response(ssdp_t ssdp, ssdp_search_t* search,
         {
             search_response = vector_add(ssdp->search_responses);
             search_response->ssdp = ssdp;
-            search_response->sender = (struct sockaddr*)((char*)search_response + sizeof(search_response_t));
         }
+        search_response->sender = (struct sockaddr*)((char*)search_response + sizeof(search_response_t));
 
         search_response->resp = resp;
         search_response->inet = inet;
         search_response->senderlen = search->senderlen;
         memcpy(search_response->sender, search->sender, search->senderlen);
-        search_response->timer = timers_add(ssdp->timers, search->mx * 1000,
+        search_response->timer = timers_add(ssdp->timers,
+                                            (search->mx * 1000) - 200,
                                             search_response,
                                             search_response_cb);
         ret = true;
@@ -350,6 +351,10 @@ bool ssdp_notify(ssdp_t ssdp, ssdp_notify_t* notify)
     req_addheader(req, "Cache-Control", tmp);
     if (notify->server != NULL)
         req_addheader(req, "Server", notify->server);
+    if (notify->opt != NULL)
+        req_addheader(req, "OPT", notify->opt);
+    if (notify->nls != NULL)
+        req_addheader(req, "01-NLS", notify->nls);
     free(tmp);
     ret = req_send(req, inet->wsock, inet->notify_host, inet->notify_hostlen,
                    ssdp->log);
@@ -684,6 +689,18 @@ void read_data(void* userdata, socket_t sock)
                 else if (strcasecmp(key, "AL") == 0)
                 {
                     notify_data.location = value;
+                }
+                else if (strcasecmp(key, "Server") == 0)
+                {
+                    notify_data.server = value;
+                }
+                else if (strcasecmp(key, "OPT") == 0)
+                {
+                    notify_data.opt = value;
+                }
+                else if (strcasecmp(key, "01-NLS") == 0)
+                {
+                    notify_data.nls = value;
                 }
                 else if (strcasecmp(key, "Cache-Control") == 0)
                 {

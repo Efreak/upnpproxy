@@ -29,6 +29,7 @@ typedef struct _ssdp_notify_t
     time_t expires;
     char* nt;
     char* nts;
+    char* opt, *nls;
 } ssdp_notify_t;
 
 typedef void (* ssdp_search_callback_t)(void* userdata, ssdp_search_t* search);

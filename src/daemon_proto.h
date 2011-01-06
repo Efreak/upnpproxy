@@ -11,6 +11,8 @@ typedef struct
     char* location;
     char* service;
     char* server; /* May be NULL */
+    char* opt; /* May be NULL */
+    char* nls; /* May be NULL */
 } pkg_new_service_t;
 
 /* Sent when a daemon expires a service.
@@ -75,7 +77,7 @@ typedef struct
 
 /* Will only copy the pointers, not their data */
 void pkg_new_service(pkg_t* pkg, uint32_t service_id, char* usn, char* location,
-                     char* service, char* server);
+                     char* service, char* server, char* opt, char* nls);
 void pkg_old_service(pkg_t* pkg, uint32_t service_id);
 void pkg_create_tunnel(pkg_t* pkg, uint32_t service_id, uint32_t tunnel_id, char* host);
 void pkg_close_tunnel(pkg_t* pkg, uint32_t tunnel_id);

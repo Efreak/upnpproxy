@@ -77,6 +77,8 @@ typedef struct _localservice_t
     char* location;
     char* server;
     char* service;
+    char* opt;
+    char* nls;
     time_t expires;
     timecb_t expirecb;
     daemon_t daemon;
@@ -588,6 +590,8 @@ static bool daemon_add_local(daemon_t daemon, ssdp_notify_t* notify)
     local.usn = strdup(notify->usn);
     local.service = strdup(notify->nt);
     local.server = safestrdup(notify->server);
+    local.opt = safestrdup(notify->opt);
+    local.nls = safestrdup(notify->nls);
     local.location = strdup(notify->location);
     local.expires = notify->expires;
     local.daemon = daemon;
@@ -609,7 +613,8 @@ static bool daemon_add_local(daemon_t daemon, ssdp_notify_t* notify)
         pkg_t pkg;
         size_t i;
         pkg_new_service(&pkg, localptr->id, localptr->usn, localptr->location,
-                        localptr->service, localptr->server);
+                        localptr->service, localptr->server, localptr->opt,
+                        localptr->nls);
         for (i = 0; i < daemon->servers; ++i)
         {
             daemon_server_write_pkg(daemon->server + i, &pkg, true);
@@ -1207,6 +1212,14 @@ static void daemon_add_remote(daemon_t daemon, server_t* server,
     {
         remote.notify.server = strdup(new_service->server);
     }
+    if (new_service->opt != NULL)
+    {
+        remote.notify.opt = strdup(new_service->opt);
+    }
+    if (new_service->nls != NULL)
+    {
+        remote.notify.nls = strdup(new_service->nls);
+    }
     remote.notify.usn = strdup(new_service->usn);
     remote.notify.nt = strdup(new_service->service);
     remote.notify.expires = time(NULL) + REMOTE_EXPIRE_TTL;
@@ -1645,7 +1658,8 @@ static void daemon_server_writable_cb(void* userdata, socket_t sock)
             pkg_t pkg;
             localservice_t* local = map_getat(daemon->locals, i);
             pkg_new_service(&pkg, local->id, local->usn, local->location,
-                            local->service, local->server);
+                            local->service, local->server, local->opt,
+                            local->nls);
             daemon_server_write_pkg(server, &pkg, false);
         }
         break;
@@ -2291,6 +2305,8 @@ void localservice_free(void* _local)
     free(local->location);
     free(local->service);
     free(local->server);
+    free(local->opt);
+    free(local->nls);
 }
 
 uint32_t remoteservice_hash(const void* _remote)
@@ -2331,6 +2347,8 @@ void remoteservice_free(void* _remote)
     free(remote->notify.server);
     free(remote->notify.usn);
     free(remote->notify.nt);
+    free(remote->notify.opt);
+    free(remote->notify.nls);
     free(remote->host);
 }
 

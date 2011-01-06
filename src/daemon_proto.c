@@ -6,7 +6,7 @@
 static void pkg_freecontent(pkg_t* pkg);
 
 void pkg_new_service(pkg_t* pkg, uint32_t service_id, char* usn, char* location,
-                     char* service, char* server)
+                     char* service, char* server, char* opt, char* nls)
 {
     pkg->type = PKG_NEW_SERVICE;
     assert(usn != NULL && location != NULL && service != NULL);
@@ -15,6 +15,8 @@ void pkg_new_service(pkg_t* pkg, uint32_t service_id, char* usn, char* location,
     pkg->content.new_service.location = location;
     pkg->content.new_service.service = service;
     pkg->content.new_service.server = server;
+    pkg->content.new_service.opt = opt;
+    pkg->content.new_service.nls = nls;
 }
 
 void pkg_old_service(pkg_t* pkg, uint32_t service_id)
@@ -141,11 +143,15 @@ bool pkg_write(buf_t buf, pkg_t* pkg)
     case PKG_NEW_SERVICE:
         pkgtype = 1;
         pkglen = 4 +
-            2 + strlen(pkg->content.new_service.usn) +
-            2 + strlen(pkg->content.new_service.location) +
-            2 + strlen(pkg->content.new_service.service) + 2
-            + (pkg->content.new_service.server != NULL
-               ? strlen(pkg->content.new_service.server) : 0);
+            4 + strlen(pkg->content.new_service.usn) +
+            4 + strlen(pkg->content.new_service.location) +
+            4 + strlen(pkg->content.new_service.service) +
+            4 + (pkg->content.new_service.server != NULL
+                 ? strlen(pkg->content.new_service.server) : 0) +
+            4 + (pkg->content.new_service.opt != NULL
+                 ? strlen(pkg->content.new_service.opt) : 0) +
+            4 + (pkg->content.new_service.nls != NULL
+                 ? strlen(pkg->content.new_service.nls) : 0);
         break;
     case PKG_OLD_SERVICE:
         pkgtype = 2;
@@ -153,7 +159,7 @@ bool pkg_write(buf_t buf, pkg_t* pkg)
         break;
     case PKG_CREATE_TUNNEL:
         pkgtype = 10;
-        pkglen = 8 + 2 + strlen(pkg->content.create_tunnel.host);
+        pkglen = 8 + 4 + strlen(pkg->content.create_tunnel.host);
         break;
     case PKG_CLOSE_TUNNEL:
         pkgtype = 11;
@@ -189,6 +195,8 @@ bool pkg_write(buf_t buf, pkg_t* pkg)
         write_str(&wptr, pkg->content.new_service.location);
         write_str(&wptr, pkg->content.new_service.service);
         write_nullstr(&wptr, pkg->content.new_service.server);
+        write_nullstr(&wptr, pkg->content.new_service.opt);
+        write_nullstr(&wptr, pkg->content.new_service.nls);
         write_done(&wptr);
         return true;
     case PKG_OLD_SERVICE:
@@ -419,6 +427,34 @@ bool pkg_peek(buf_t buf, pkg_t* pkg)
                 {
                     pkg->content.new_service.server = NULL;
                 }
+                len = ptr[0] << 24 | ptr[1] << 16 | ptr[2] << 8 | ptr[3];
+                ptr[0] = '\0';
+                ptr += 4;
+                if (len > 0)
+                {
+                    pkg->content.new_service.opt = malloc(len + 1);
+                    memcpy(pkg->content.new_service.opt, ptr, len);
+                    pkg->content.new_service.opt[len] = '\0';
+                    ptr += len;
+                }
+                else
+                {
+                    pkg->content.new_service.opt = NULL;
+                }
+                len = ptr[0] << 24 | ptr[1] << 16 | ptr[2] << 8 | ptr[3];
+                ptr[0] = '\0';
+                ptr += 4;
+                if (len > 0)
+                {
+                    pkg->content.new_service.nls = malloc(len + 1);
+                    memcpy(pkg->content.new_service.nls, ptr, len);
+                    pkg->content.new_service.nls[len] = '\0';
+                    ptr += len;
+                }
+                else
+                {
+                    pkg->content.new_service.nls = NULL;
+                }
                 pkg->tmp1 = (char*)ptr - rptr.org;
                 pkg->tmp2 = 0x80;
                 return true;
@@ -429,6 +465,8 @@ bool pkg_peek(buf_t buf, pkg_t* pkg)
                 pkg->content.new_service.location = read_str(&rptr);
                 pkg->content.new_service.service = read_str(&rptr);
                 pkg->content.new_service.server = read_nullstr(&rptr);
+                pkg->content.new_service.opt = read_nullstr(&rptr);
+                pkg->content.new_service.nls = read_nullstr(&rptr);
                 read_done(&rptr);
             }
             return true;
@@ -539,7 +577,11 @@ pkg_t* pkg_dup(const pkg_t* pkg)
                         strdup(pkg->content.new_service.location),
                         strdup(pkg->content.new_service.service),
                         pkg->content.new_service.server != NULL ?
-                        strdup(pkg->content.new_service.server) : NULL);
+                        strdup(pkg->content.new_service.server) : NULL,
+                        pkg->content.new_service.opt != NULL ?
+                        strdup(pkg->content.new_service.opt) : NULL,
+                        pkg->content.new_service.nls != NULL ?
+                        strdup(pkg->content.new_service.nls) : NULL);
         break;
     case PKG_OLD_SERVICE:
         pkg_old_service(ret, pkg->content.old_service.service_id);
@@ -576,6 +618,8 @@ void pkg_freecontent(pkg_t* pkg)
         free(pkg->content.new_service.location);
         free(pkg->content.new_service.service);
         free(pkg->content.new_service.server);
+        free(pkg->content.new_service.opt);
+        free(pkg->content.new_service.nls);
         break;
     case PKG_CREATE_TUNNEL:
         free(pkg->content.create_tunnel.host);
