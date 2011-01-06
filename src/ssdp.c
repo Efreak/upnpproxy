@@ -99,8 +99,7 @@ ssdp_t ssdp_new(log_t log, selector_t selector, timers_t timers,
 
     ssdp->addrbuf = socket_allocate_addrbuffer(&(ssdp->addrbufsize));
 
-    ssdp->search_responses = vector_new(sizeof(search_response_t) +
-                                        ssdp->addrbufsize);
+    ssdp->search_responses = vector_new(sizeof(search_response_t*));
 
     return ssdp;
 }
@@ -241,7 +240,6 @@ bool ssdp_search(ssdp_t ssdp, ssdp_search_t* search)
 static long search_response_cb(void* userdata)
 {
     search_response_t* search_response = userdata;
-    search_response->sender = (struct sockaddr*)((char*)search_response + sizeof(search_response_t));
     resp_send(search_response->resp, search_response->inet->rsock,
               search_response->sender, search_response->senderlen,
               search_response->ssdp->log);
@@ -295,7 +293,7 @@ bool ssdp_search_response(ssdp_t ssdp, ssdp_search_t* search,
         search_response_t* search_response = NULL;
         for (i = 0; i < vector_size(ssdp->search_responses); ++i)
         {
-            search_response = vector_get(ssdp->search_responses, i);
+            search_response = *((search_response_t**)vector_get(ssdp->search_responses, i));
             if (search_response->timer == NULL)
             {
                 break;
@@ -304,10 +302,11 @@ bool ssdp_search_response(ssdp_t ssdp, ssdp_search_t* search,
         }
         if (search_response == NULL)
         {
-            search_response = vector_add(ssdp->search_responses);
+            search_response = calloc(1, sizeof(search_response_t) + ssdp->addrbufsize);
+            vector_push(ssdp->search_responses, &search_response);
             search_response->ssdp = ssdp;
+            search_response->sender = (struct sockaddr*)((char*)search_response + sizeof(search_response_t));
         }
-        search_response->sender = (struct sockaddr*)((char*)search_response + sizeof(search_response_t));
 
         search_response->resp = resp;
         search_response->inet = inet;
@@ -400,13 +399,14 @@ void ssdp_free(ssdp_t ssdp)
 
     for (i = 0; i < vector_size(ssdp->search_responses); ++i)
     {
-        search_response_t* search_response = vector_get(ssdp->search_responses, i);
+        search_response_t* search_response = *((search_response_t**)vector_get(ssdp->search_responses, i));
         if (search_response->timer != NULL)
         {
             timecb_cancel(search_response->timer);
             search_response->timer = NULL;
             resp_free(search_response->resp);
         }
+        free(search_response);
     }
     vector_free(ssdp->search_responses);
     inet_free(ssdp, &ssdp->inet4);
