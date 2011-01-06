@@ -41,6 +41,8 @@ typedef struct
 typedef struct
 {
     uint32_t tunnel_id;
+    bool local; /* if true, the tunnel_id is the sending servers,
+                 * if false, the tunnel_id is the reciving servers */
     uint32_t size;
     void* data;
 } pkg_data_tunnel_t;
@@ -77,7 +79,7 @@ void pkg_new_service(pkg_t* pkg, uint32_t service_id, char* usn, char* location,
 void pkg_old_service(pkg_t* pkg, uint32_t service_id);
 void pkg_create_tunnel(pkg_t* pkg, uint32_t service_id, uint32_t tunnel_id, char* host);
 void pkg_close_tunnel(pkg_t* pkg, uint32_t tunnel_id);
-void pkg_data_tunnel(pkg_t* pkg, uint32_t tunnel_id, void* data, uint32_t len);
+void pkg_data_tunnel(pkg_t* pkg, uint32_t tunnel_id, bool local, void* data, uint32_t len);
 
 /* Duplicate the given package */
 pkg_t* pkg_dup(const pkg_t* pkg);

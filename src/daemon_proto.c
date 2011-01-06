@@ -38,10 +38,11 @@ void pkg_close_tunnel(pkg_t* pkg, uint32_t tunnel_id)
     pkg->content.close_tunnel.tunnel_id = tunnel_id;
 }
 
-void pkg_data_tunnel(pkg_t* pkg, uint32_t tunnel_id, void* data, uint32_t len)
+void pkg_data_tunnel(pkg_t* pkg, uint32_t tunnel_id, bool local, void* data, uint32_t len)
 {
     pkg->type = PKG_DATA_TUNNEL;
     pkg->content.data_tunnel.tunnel_id = tunnel_id;
+    pkg->content.data_tunnel.local = local;
     pkg->content.data_tunnel.data = data;
     pkg->content.data_tunnel.size = len;
 }
@@ -161,13 +162,13 @@ bool pkg_write(buf_t buf, pkg_t* pkg)
     case PKG_DATA_TUNNEL:
         pkgtype = 12;
         if (wptr.totavail < 1024 ||
-            pkg->content.data_tunnel.size < (wptr.totavail - 10))
+            pkg->content.data_tunnel.size < (wptr.totavail - 11))
         {
-            pkglen = 4 + pkg->content.data_tunnel.size;
+            pkglen = 5 + pkg->content.data_tunnel.size;
         }
         else
         {
-            pkglen = 4 + (wptr.totavail - 10);
+            pkglen = 5 + (wptr.totavail - 11);
         }
         break;
     }
@@ -206,8 +207,8 @@ bool pkg_write(buf_t buf, pkg_t* pkg)
         return true;
     case PKG_DATA_TUNNEL:
         write_uint32(&wptr, pkg->content.data_tunnel.tunnel_id);
-        write_uint32(&wptr, pkglen - 4);
-        if (pkglen - 4 == pkg->content.data_tunnel.size)
+        write_uint8(&wptr, pkg->content.data_tunnel.local ? 1 : 0);
+        if (pkglen - 5 == pkg->content.data_tunnel.size)
         {
             write_raw(&wptr, pkg->content.data_tunnel.data,
                       pkg->content.data_tunnel.size);
@@ -216,11 +217,11 @@ bool pkg_write(buf_t buf, pkg_t* pkg)
         }
         else
         {
-            assert(pkglen - 4 < pkg->content.data_tunnel.size);
-            write_raw(&wptr, pkg->content.data_tunnel.data, pkglen - 4);
+            assert(pkglen - 5 < pkg->content.data_tunnel.size);
+            write_raw(&wptr, pkg->content.data_tunnel.data, pkglen - 5);
             pkg->content.data_tunnel.data = (char*)pkg->content.data_tunnel.data
-                + (pkglen - 4);
-            pkg->content.data_tunnel.size -= (pkglen - 4);
+                + (pkglen - 5);
+            pkg->content.data_tunnel.size -= (pkglen - 5);
             write_done(&wptr);
             return false;
         }
@@ -275,6 +276,13 @@ static uint32_t read_uint32(read_ptr_t rptr)
     uint8_t tmp[4];
     read_raw(rptr, tmp, 4);
     return tmp[0] << 24 | tmp[1] << 16 | tmp[2] << 8 | tmp[3];
+}
+
+static uint8_t read_uint8(read_ptr_t rptr)
+{
+    uint8_t tmp;
+    read_raw(rptr, &tmp, 1);
+    return tmp;
 }
 
 static char* read_str(read_ptr_t rptr)
@@ -336,20 +344,22 @@ bool pkg_peek(buf_t buf, pkg_t* pkg)
         if (rptr.totavail < 6 + pkglen)
         {
             if (buf_wavail(buf) == 0 && pkgtype == 12 &&
-                rptr.totavail >= 20)
+                rptr.totavail >= 22)
             {
                 /* If we got one big data package larger than the buffer,
                  * return it in parts */
-                size_t avail = rptr.totavail - 10;
+                size_t avail = rptr.totavail - 11;
                 buf_skip(buf, 6);
                 rptr.totavail -= 6;
                 rptr.buf = buf;
                 rptr.ptr = rptr.org = buf_rptr(buf, &(rptr.ptravail));
 
                 pkg->type = PKG_DATA_TUNNEL;
-                pkg->content.data_tunnel.size = read_uint32(&rptr);
+                pkg->content.data_tunnel.tunnel_id = read_uint32(&rptr);
+                pkg->content.data_tunnel.local = read_uint8(&rptr) != 0;
+                pkg->content.data_tunnel.size = pkglen - 5;
 
-                assert(avail == rptr.ptravail || (avail - rptr.ptravail) >= 10);
+                assert(avail == rptr.ptravail || (avail - rptr.ptravail) >= 11);
                 pkg->content.data_tunnel.data = (char*)rptr.ptr;
                 pkg->tmp1 = pkg->content.data_tunnel.size - rptr.ptravail;
                 pkg->tmp2 = 0x81;
@@ -442,7 +452,8 @@ bool pkg_peek(buf_t buf, pkg_t* pkg)
         case 12:
             pkg->type = PKG_DATA_TUNNEL;
             pkg->content.data_tunnel.tunnel_id = read_uint32(&rptr);
-            pkg->content.data_tunnel.size = read_uint32(&rptr);
+            pkg->content.data_tunnel.local = read_uint8(&rptr) != 0;
+            pkg->content.data_tunnel.size = pkglen - 5;
             if (rptr.ptravail >= pkg->content.data_tunnel.size)
             {
                 pkg->content.data_tunnel.data = (char*)rptr.ptr;
@@ -451,7 +462,7 @@ bool pkg_peek(buf_t buf, pkg_t* pkg)
                 pkg->tmp2 = 0x80;
                 return true;
             }
-            else if (rptr.ptravail > 10)
+            else if (rptr.ptravail > 11)
             {
                 pkg->content.data_tunnel.data = (char*)rptr.ptr;
                 pkg->tmp1 = pkg->content.data_tunnel.size - rptr.ptravail;
@@ -493,24 +504,25 @@ void pkg_read(buf_t buf, pkg_t* pkg)
     {
         /* pkg_peek cut a DATA_TUNNEL package in two. So write a new header
          * so the next call to pkg_peek collects the next one */
-        uint32_t pkglen = 10 + pkg->tmp1;
-        uint8_t header[10];
+        uint32_t pkglen = 11 + pkg->tmp1;
+        uint8_t header[11];
         struct _write_ptr_t wptr;
         assert(pkg->tmp2 == 1);
-        assert(pkg->content.data_tunnel.size >= 10);
-        buf_rmove(buf, pkg->content.data_tunnel.size - 10);
+        assert(pkg->content.data_tunnel.size >= 11);
+        buf_rmove(buf, pkg->content.data_tunnel.size - 11);
         assert(buf_ravail(buf) >= pkglen);
         wptr.ptr = wptr.org = (char*)header;
         wptr.buf = NULL;
-        wptr.ptravail = 10 + 1; /* the last byte is to trick write_raw not to
+        wptr.ptravail = 11 + 1; /* the last byte is to trick write_raw not to
                                  * sync */
         wptr.totavail = wptr.ptravail;
         write_uint32(&wptr, pkglen);
         write_uint8(&wptr, 12);
         write_uint8(&wptr, 0);
-        write_uint32(&wptr, pkglen - 10);
+        write_uint32(&wptr, pkg->content.data_tunnel.tunnel_id);
+        write_uint8(&wptr, pkg->content.data_tunnel.local ? 1 : 0);
         assert(wptr.ptravail == 1);
-        buf_replace(buf, header, 10);
+        buf_replace(buf, header, 11);
     }
 }
 
@@ -545,8 +557,9 @@ pkg_t* pkg_dup(const pkg_t* pkg)
         void* data = malloc(pkg->content.data_tunnel.size);
         memcpy(data, pkg->content.data_tunnel.data,
                pkg->content.data_tunnel.size);
-        pkg_data_tunnel(ret, pkg->content.data_tunnel.tunnel_id, data,
-                        pkg->content.data_tunnel.size);
+        pkg_data_tunnel(ret, pkg->content.data_tunnel.tunnel_id,
+                        pkg->content.data_tunnel.local,
+                        data, pkg->content.data_tunnel.size);
         break;
     }
     }

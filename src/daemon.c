@@ -30,6 +30,7 @@ static const size_t SERVER_BUFFER_IN = 8192;
 static const size_t SERVER_BUFFER_OUT = 8192;
 static const size_t TUNNEL_BUFFER_IN = 4096;
 static const size_t TUNNEL_BUFFER_OUT = 4096;
+static const size_t TUNNEL_BUFFER_PREOUT = 1024;
 
 /* Every 30 sec */
 static const unsigned long SERVER_RECONNECT_TIMER = 30 * 1000;
@@ -56,7 +57,12 @@ typedef struct _server_t
 
     buf_t in, out;
 
-    map_t tunnels;
+    /* Local as in created by this server - at me */
+    map_t local_tunnels;
+
+    /* Remote as in created by me - at this server */
+    uint32_t remote_tunnel_id;
+    map_t remote_tunnels;
 
     vector_t waiting_tunnels;
     vector_t waiting_pkgs;
@@ -81,6 +87,7 @@ typedef struct _remoteservice_t
     uint32_t source_id;
     server_t* source;
     ssdp_notify_t notify;
+    char* host;
     socket_t sock;
     timecb_t touchcb;
 } remoteservice_t;
@@ -89,7 +96,7 @@ typedef struct _tunnel_t
 {
     uint32_t id;
     socket_t sock;
-    buf_t in, out;
+    buf_t in, out, preout;
     conn_state_t state;
     bool remote;
     union {
@@ -97,6 +104,8 @@ typedef struct _tunnel_t
         {
             localservice_t* service;
             server_t* server;
+            char* remote_host;
+            char* local_host;
         } local;
         remoteservice_t* remote;
     } source;
@@ -124,10 +133,9 @@ struct _daemon_t
     server_t* server;
     size_t servers;
 
+    uint32_t local_id;
     map_t locals;
     map_t remotes;
-    uint32_t tunnel_id;
-    map_t tunnels;
 
     char* ssdp_s;
     uuid_t uuid;
@@ -581,6 +589,14 @@ static bool daemon_add_local(daemon_t daemon, ssdp_notify_t* notify)
     local.location = strdup(notify->location);
     local.expires = notify->expires;
     local.daemon = daemon;
+    for (;;)
+    {
+        local.id = ++daemon->local_id;
+        if (map_get(daemon->locals, &local) == NULL)
+        {
+            break;
+        }
+    }
     localptr = map_put(daemon->locals, &local);
     localptr->expirecb = timers_add(daemon->timers,
                                     (localptr->expires - now) * 1000,
@@ -730,6 +746,16 @@ static bool daemon_setup_ssdp(daemon_t daemon)
         search.st = (char*)"upnp:rootdevice";
         search.mx = 3;
         ssdp_search(daemon->ssdp, &search);
+
+        search.st = (char*)"urn:schemas-upnp-org:service:ContentDirectory:1";
+        ssdp_search(daemon->ssdp, &search);
+
+        search.st = (char*)"urn:schemas-upnp-org:service:ContentDirectory:2";
+        ssdp_search(daemon->ssdp, &search);
+
+        search.st = (char*)"urn:schemas-wifialliance-org:device:WFADevice:1";
+        ssdp_search(daemon->ssdp, &search);
+
         free(search.host);
     }
     return true;
@@ -927,11 +953,11 @@ static void daemon_lost_tunnel(tunnel_t* tunnel)
 
     if (tunnel->remote)
     {
-        map_remove(daemon->tunnels, tunnel);
+        map_remove(tunnel->source.remote->source->remote_tunnels, tunnel);
     }
     else
     {
-        map_remove(tunnel->source.local.server->tunnels, tunnel);
+        map_remove(tunnel->source.local.server->local_tunnels, tunnel);
     }
 }
 
@@ -953,7 +979,6 @@ static bool local_tunnel_eq(const void* _t1, const void* _t2)
 static uint32_t remote_tunnel_hash(const void* _tunnel)
 {
     const tunnel_t* tunnel = _tunnel;
-    /* TODO: Add source server to hash in some way */
     assert(tunnel->remote);
     return tunnel->id;
 }
@@ -963,8 +988,7 @@ static bool remote_tunnel_eq(const void* _t1, const void* _t2)
     const tunnel_t* t1 = _t1;
     const tunnel_t* t2 = _t2;
     assert(t1->remote && t2->remote);
-    return t1->id == t2->id &&
-        t1->source.remote->source == t2->source.remote->source;
+    return t1->id == t2->id;
 }
 
 static void tunnel_free(tunnel_t* tunnel)
@@ -984,8 +1008,14 @@ static void tunnel_free(tunnel_t* tunnel)
         socket_close(tunnel->sock);
         tunnel->sock = -1;
     }
+    if (!tunnel->remote)
+    {
+        free(tunnel->source.local.remote_host);
+        free(tunnel->source.local.local_host);
+    }
     buf_free(tunnel->in);
     buf_free(tunnel->out);
+    buf_free(tunnel->preout);
 }
 
 static void remote_tunnel_free(void* _tunnel)
@@ -1056,6 +1086,8 @@ static int _daemon_tunnel_flush_output(tunnel_t* tunnel);
 static void remote_tunnel_write_cb(void* userdata, socket_t sock)
 {
     tunnel_t* tunnel = userdata;
+    assert(tunnel->sock == sock);
+    assert(tunnel->remote);
     if (_daemon_tunnel_flush_output(tunnel) == 0)
     {
         selector_chkwrite(tunnel->source.remote->source->daemon->selector,
@@ -1075,25 +1107,27 @@ static void remoteservice_read_cb(void* userdata, socket_t sock)
     {
         return;
     }
+    socket_setblocking(tunnel.sock, false);
     tunnel.state = CONN_CONNECTED;
     tunnel.remote = true;
     tunnel.source.remote = remote;
     tunnel.in = buf_new(TUNNEL_BUFFER_IN);
     tunnel.out = buf_new(TUNNEL_BUFFER_OUT);
+    tunnel.preout = NULL;
     for (;;)
     {
-        tunnel.id = ++remote->source->daemon->tunnel_id;
-        if (map_get(remote->source->daemon->tunnels, &tunnel) == NULL)
+        tunnel.id = ++remote->source->remote_tunnel_id;
+        if (map_get(remote->source->remote_tunnels, &tunnel) == NULL)
         {
             break;
         }
     }
-    tunnelptr = map_put(remote->source->daemon->tunnels, &tunnel);
+    tunnelptr = map_put(remote->source->remote_tunnels, &tunnel);
     selector_add(remote->source->daemon->selector, tunnelptr->sock, tunnelptr,
                  tunnel_read_cb, remote_tunnel_write_cb);
     selector_chkwrite(remote->source->daemon->selector, tunnelptr->sock,
                       false);
-    pkg_create_tunnel(&pkg, remote->source_id, tunnelptr->id);
+    pkg_create_tunnel(&pkg, remote->source_id, tunnelptr->id, remote->host);
     daemon_server_write_pkg(remote->source, &pkg, true);
 }
 
@@ -1118,7 +1152,7 @@ static void daemon_add_remote(daemon_t daemon, server_t* server,
     remote.sock = socket_tcp_listen(daemon->bind_services, 0);
     if (remote.sock < 0 || !socket_setblocking(remote.sock, false))
     {
-        log_puts(daemon->log, LVL_WARN, "Unable to listen for service");
+        log_printf(daemon->log, LVL_WARN, "Unable to listen for service: %s", socket_strerror(remote.sock));
         socket_close(remote.sock);
         free(remote.notify.host);
         return;
@@ -1163,6 +1197,7 @@ static void daemon_add_remote(daemon_t daemon, server_t* server,
     }
     free(proto);
     free(path);
+    asprinthost(&(remote.host), host, hostlen);
     free(host);
     if (new_service->server != NULL)
     {
@@ -1186,6 +1221,7 @@ static void daemon_del_remote(daemon_t daemon, server_t* server,
 {
     remoteservice_t key;
     key.source_id = old_service->service_id;
+    key.source = server;
     map_remove(daemon->remotes, &key);
 }
 
@@ -1193,6 +1229,7 @@ static void local_tunnel_write_cb(void* userdata, socket_t sock)
 {
     tunnel_t* tunnel = userdata;
     assert(tunnel->sock == sock);
+    assert(!tunnel->remote);
     switch (tunnel->state)
     {
     case CONN_DEAD:
@@ -1243,10 +1280,15 @@ static void daemon_create_tunnel(daemon_t daemon, server_t* server,
         free(tmp);
         return;
     }
+    tunnel.source.local.remote_host = strdup(create_tunnel->host);
+    asprinthost(&(tunnel.source.local.local_host),
+                tunnel.source.local.service->host,
+                tunnel.source.local.service->hostlen);
     tunnel.state = CONN_CONNECTING;
     tunnel.in = buf_new(TUNNEL_BUFFER_IN);
     tunnel.out = buf_new(TUNNEL_BUFFER_OUT);
-    tunnelptr = map_put(server->tunnels, &tunnel);
+    tunnel.preout = buf_new(TUNNEL_BUFFER_PREOUT);
+    tunnelptr = map_put(server->local_tunnels, &tunnel);
     selector_add(daemon->selector, tunnelptr->sock, tunnelptr,
                  tunnel_read_cb, local_tunnel_write_cb);
 }
@@ -1258,7 +1300,99 @@ static void daemon_close_tunnel(daemon_t daemon, server_t* server,
     key.id = close_tunnel->tunnel_id;
     key.remote = false;
     key.source.local.server = server;
-    map_remove(server->tunnels, &key);
+    map_remove(server->local_tunnels, &key);
+}
+
+static int find_host(const char* data, size_t size, const char* host,
+                     size_t* b4ptr, size_t* afptr)
+{
+    const char* end = data + size, *ptr;
+    size_t hostlen = strlen(host);
+    *b4ptr = *afptr = 0;
+    for (ptr = data; ptr < end; ++ptr)
+    {
+        if (*ptr != '\r')
+        {
+            continue;
+        }
+        if (ptr + 1 == end)
+        {
+            return -1;
+        }
+        if (ptr[1] != '\n')
+        {
+            continue;
+        }
+        if (ptr + 4 > end)
+        {
+            return -1;
+        }
+        if (memcmp(ptr + 2, "\r\n", 2) == 0)
+        {
+            return 0;
+        }
+        if (ptr + 7 > end)
+        {
+            return -1;
+        }
+        if (memcmp(ptr + 2, "Host:", 5) != 0)
+        {
+            continue;
+        }
+
+        ptr += 7;
+
+        {
+            const char* value = ptr + 1, *ptr2, *end2;
+            while (is_space(*value)) value++;
+            for (ptr2 = value + 1; ptr2 < end; ++ptr2)
+            {
+                if (*ptr2 == '\n' && ptr2[-1] == '\r')
+                {
+                    break;
+                }
+            }
+            if (ptr2 == end)
+            {
+                /* Need more data */
+                return - 1;
+            }
+            end2 = ptr2 - 1;
+            while (end2 > value && is_space(end2[-1])) --end2;
+            if ((end2 - value) == hostlen &&
+                memcmp(host, value, hostlen) == 0)
+            {
+                *b4ptr = ptr + 1 - data;
+                *afptr = ptr2 - 1 - data;
+                return 1;
+            }
+            ptr = ptr2 - 2;
+        }
+    }
+
+    return 0;
+}
+
+static bool _tunnel_write_data(daemon_t daemon, tunnel_t* tunnel,
+                               const char* data, size_t size)
+{
+    while (size > 0)
+    {
+        size_t wrote = buf_write(tunnel->out, data, size);
+        data += wrote;
+        size -= wrote;
+        if (size > 0)
+        {
+            if (wrote == 0)
+            {
+                log_printf(daemon->log, LVL_WARN,
+                           "Too much data for tunnel (%lu lost)", size);
+                return false;
+            }
+            daemon_tunnel_flush_output(tunnel);
+        }
+    }
+    return true;
 }
 
 static void daemon_data_tunnel(daemon_t daemon, server_t* server,
@@ -1267,37 +1401,92 @@ static void daemon_data_tunnel(daemon_t daemon, server_t* server,
     tunnel_t key, *tunnel;
     const char* in;
     size_t in_avail;
-    key.id = data_tunnel->tunnel_id;
-    key.remote = false;
-    key.source.local.server = server;
-    tunnel = map_get(server->tunnels, &key);
+
+    if (data_tunnel->local)
+    {
+        key.id = data_tunnel->tunnel_id;
+        key.remote = true;
+        tunnel = map_get(server->remote_tunnels, &key);
+    }
+    else
+    {
+        key.id = data_tunnel->tunnel_id;
+        key.remote = false;
+        key.source.local.server = server;
+        tunnel = map_get(server->local_tunnels, &key);
+    }
     if (tunnel == NULL)
     {
         char* tmp;
         asprinthost(&tmp, server->host, server->hostlen);
-        log_printf(daemon->log, LVL_WARN, "Got data from server %s for non-existant tunnel %lu", tmp, data_tunnel->tunnel_id);
+        log_printf(daemon->log, LVL_WARN, "Got data from server %s for non-existant %s tunnel %lu", tmp, data_tunnel->local ? "remote" : "local", data_tunnel->tunnel_id);
         free(tmp);
         return;
     }
     in = data_tunnel->data;
     in_avail = data_tunnel->size;
-    while (in_avail > 0)
+
+    if (tunnel->remote)
     {
-        size_t wrote = buf_write(tunnel->out, in, in_avail);
-        in += wrote;
-        in_avail -= wrote;
-        if (in_avail > 0)
+        if (!_tunnel_write_data(daemon, tunnel, in, in_avail))
         {
-            if (wrote == 0)
-            {
-                log_printf(daemon->log, LVL_WARN,
-                           "Too much data for tunnel (%lu lost)", in_avail);
-                daemon_lost_tunnel(tunnel);
-                return;
-            }
-            daemon_tunnel_flush_output(tunnel);
+            daemon_lost_tunnel(tunnel);
+            return;
         }
     }
+    else
+    {
+        for (;;)
+        {
+            size_t b4ptr, afptr;
+            size_t wrote;
+            int ret = find_host(in, in_avail, tunnel->source.local.remote_host, &b4ptr, &afptr);
+            if (ret < 0)
+            {
+                /* need more data */
+                wrote = buf_write(tunnel->preout, in, in_avail);
+                if (wrote < in_avail)
+                {
+                    log_printf(daemon->log, LVL_WARN,
+                               "Too much data for tunnel (%lu lost)", in_avail);
+                    daemon_lost_tunnel(tunnel);
+                    return;
+                }
+                break;
+            }
+            else if (ret == 0)
+            {
+                /* just write whole buffer */
+                if (!_tunnel_write_data(daemon, tunnel, in, in_avail))
+                {
+                    daemon_lost_tunnel(tunnel);
+                    return;
+                }
+                break;
+            }
+            else
+            {
+                if (!_tunnel_write_data(daemon, tunnel, in, b4ptr))
+                {
+                    daemon_lost_tunnel(tunnel);
+                    return;
+                }
+                if (!_tunnel_write_data(daemon, tunnel, tunnel->source.local.local_host, strlen(tunnel->source.local.local_host)))
+                {
+                    daemon_lost_tunnel(tunnel);
+                    return;
+                }
+                in += afptr;
+                in_avail -= afptr;
+                if (in_avail == 0)
+                {
+                    break;
+                }
+            }
+        }
+    }
+
+    daemon_tunnel_flush_output(tunnel);
 }
 
 static void daemon_server_incoming_cb(void* userdata, socket_t sock)
@@ -1306,6 +1495,7 @@ static void daemon_server_incoming_cb(void* userdata, socket_t sock)
     daemon_t daemon = server->daemon;
     size_t avail = 0;
     char* ptr;
+    bool data_done;
 
     switch (server->state)
     {
@@ -1348,59 +1538,79 @@ static void daemon_server_incoming_cb(void* userdata, socket_t sock)
         break;
     }
 
-    ptr = buf_wptr(server->in, &avail);
-    if (avail > 0)
+    data_done = false;
+    while (!data_done)
     {
-        ssize_t got = socket_read(sock, ptr, avail);
-        if (got <= 0)
+        ptr = buf_wptr(server->in, &avail);
+        if (avail > 0)
         {
-            char* tmp;
-            if (socket_blockingerror(sock))
+            ssize_t got = socket_read(sock, ptr, avail);
+            if (got < 0)
             {
+                if (socket_blockingerror(sock))
+                {
+                    data_done = true;
+                }
+                else
+                {
+	                char* tmp;
+                    asprinthost(&tmp, server->host, server->hostlen);
+                    log_printf(daemon->log, LVL_WARN,
+                               "Lost connection with server %s: %s",
+                               tmp,
+                               socket_strerror(sock));
+                    free(tmp);
+                    daemon_lost_server(daemon, server, false);
+                    return;
+                }
+            }
+            else if (got == 0)
+            {
+                char* tmp;
+                asprinthost(&tmp, server->host, server->hostlen);
+                log_printf(daemon->log, LVL_WARN,
+                           "Lost connection with server %s: Connection closed",
+                           tmp);
+                free(tmp);
+                daemon_lost_server(daemon, server, false);
                 return;
             }
-
-            asprinthost(&tmp, server->host, server->hostlen);
-            log_printf(daemon->log, LVL_WARN,
-                       "Lost connection with server %s: %s",
-                       tmp,
-                       got < 0 ? socket_strerror(sock) : "Connection closed");
-            free(tmp);
-            daemon_lost_server(daemon, server, false);
-            return;
-        }
-        buf_wmove(server->in, got);
-    }
-
-    for (;;)
-    {
-        pkg_t pkg;
-        if (pkg_peek(server->in, &pkg))
-        {
-            switch (pkg.type)
+            else
             {
-            case PKG_NEW_SERVICE:
-                daemon_add_remote(daemon, server, &(pkg.content.new_service));
-                break;
-            case PKG_OLD_SERVICE:
-                daemon_del_remote(daemon, server, &(pkg.content.old_service));
-                break;
-            case PKG_CREATE_TUNNEL:
-                daemon_create_tunnel(daemon, server, &(pkg.content.create_tunnel));
-                break;
-            case PKG_CLOSE_TUNNEL:
-                daemon_close_tunnel(daemon, server, &(pkg.content.close_tunnel));
-                break;
-            case PKG_DATA_TUNNEL:
-                daemon_data_tunnel(daemon, server, &(pkg.content.data_tunnel));
+                buf_wmove(server->in, got);
+            }
+        }
+
+        for (;;)
+        {
+            pkg_t pkg;
+            if (pkg_peek(server->in, &pkg))
+            {
+                switch (pkg.type)
+                {
+                case PKG_NEW_SERVICE:
+                    daemon_add_remote(daemon, server, &(pkg.content.new_service));
+                    break;
+                case PKG_OLD_SERVICE:
+                    daemon_del_remote(daemon, server, &(pkg.content.old_service));
+                    break;
+                case PKG_CREATE_TUNNEL:
+                    daemon_create_tunnel(daemon, server, &(pkg.content.create_tunnel));
+                    break;
+                case PKG_CLOSE_TUNNEL:
+                    daemon_close_tunnel(daemon, server, &(pkg.content.close_tunnel));
+                    break;
+                case PKG_DATA_TUNNEL:
+                    daemon_data_tunnel(daemon, server, &(pkg.content.data_tunnel));
+                    break;
+                }
+                pkg_read(server->in, &pkg);
+            }
+            else
+            {
+                assert(avail > 0);
                 break;
             }
-            pkg_read(server->in, &pkg);
-        }
-        else
-        {
-            assert(avail > 0);
-            break;
         }
     }
 }
@@ -1470,7 +1680,7 @@ static void daemon_server_writable_cb(void* userdata, socket_t sock)
         tunnel_t tunnel, *ptr;
         reflush = true;
         tunnel.id = id;
-        ptr = map_get(server->daemon->tunnels, &tunnel);
+        ptr = map_get(server->remote_tunnels, &tunnel);
         if (ptr != NULL && ptr->remote && ptr->source.remote->source == server)
         {
             daemon_tunnel_flush_input(ptr);
@@ -1515,6 +1725,7 @@ static void daemon_server_accept_cb(void* userdata, socket_t sock)
                 }
                 daemon->server[i].state = CONN_CONNECTED;
                 daemon->server[i].sock = s;
+                socket_setblocking(s, false);
                 selector_add(daemon->selector, daemon->server[i].sock,
                              daemon->server + i,
                              daemon_server_incoming_cb,
@@ -1527,6 +1738,7 @@ static void daemon_server_accept_cb(void* userdata, socket_t sock)
                 socket_close(daemon->server[i].sock);
                 daemon->server[i].state = CONN_CONNECTED;
                 daemon->server[i].sock = s;
+                socket_setblocking(s, false);
                 selector_add(daemon->selector, daemon->server[i].sock,
                              daemon->server + i,
                              daemon_server_incoming_cb,
@@ -1914,8 +2126,6 @@ int run_daemon(daemon_t daemon)
     daemon->remotes = map_new(sizeof(struct _remoteservice_t),
                               remoteservice_hash,
                               remoteservice_eq, remoteservice_free);
-    daemon->tunnels = map_new(sizeof(tunnel_t), remote_tunnel_hash,
-                              remote_tunnel_eq, remote_tunnel_free);
 
     if (!daemon_setup_server(daemon))
     {
@@ -1979,8 +2189,10 @@ void server_init(daemon_t daemon, server_t* srv,
     srv->host = host;
     srv->hostlen = hostlen;
     srv->sock = -1;
-    srv->tunnels = map_new(sizeof(tunnel_t), local_tunnel_hash, local_tunnel_eq,
-                           local_tunnel_free);
+    srv->local_tunnels = map_new(sizeof(tunnel_t), local_tunnel_hash,
+                                 local_tunnel_eq, local_tunnel_free);
+    srv->remote_tunnels = map_new(sizeof(tunnel_t), remote_tunnel_hash,
+                                  remote_tunnel_eq, remote_tunnel_free);
     srv->waiting_tunnels = vector_new(sizeof(uint32_t));
     srv->waiting_pkgs = vector_new(sizeof(pkg_t*));
 }
@@ -1998,7 +2210,8 @@ void server_free2(server_t* srv)
         socket_close(srv->sock);
         srv->sock = -1;
     }
-    map_free(srv->tunnels);
+    map_free(srv->local_tunnels);
+    map_free(srv->remote_tunnels);
     if (srv->waiting_pkgs != NULL)
     {
         size_t i;
@@ -2114,6 +2327,7 @@ void remoteservice_free(void* _remote)
     free(remote->notify.server);
     free(remote->notify.usn);
     free(remote->notify.nt);
+    free(remote->host);
 }
 
 static int _daemon_tunnel_flush_output(tunnel_t* tunnel)
@@ -2268,7 +2482,7 @@ static void daemon_tunnel_flush_input(tunnel_t* tunnel)
             dataleft = false;
             break;
         }
-        pkg_data_tunnel(&pkg, tunnel->id, (void*)ptr, avail);
+        pkg_data_tunnel(&pkg, tunnel->id, !tunnel->remote, (void*)ptr, avail);
         if (pkg_write(srv->out, &pkg))
         {
             buf_rmove(tunnel->in, avail);
@@ -2291,6 +2505,11 @@ static void daemon_tunnel_flush_input(tunnel_t* tunnel)
                 break;
             }
         }
+    }
+
+    if (!flushed)
+    {
+        daemon_server_flush_output(srv);
     }
 
     if (dataleft)
