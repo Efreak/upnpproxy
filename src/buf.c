@@ -160,7 +160,7 @@ size_t buf_rmove(buf_t buf, size_t size)
     }
     else
     {
-        assert(buf->rptr != buf->wptr || buf->full);
+        assert(buf->rptr != buf->wptr || buf->full || size == 0);
         assert(buf->rptr + size <= buf->end);
         if (size > 0)
         {
