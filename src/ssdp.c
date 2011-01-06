@@ -493,6 +493,8 @@ void read_data(void* userdata, socket_t sock)
                 if (strcmp(line, "M-SEARCH * HTTP/1.1") == 0)
                 {
                     search = true;
+                    search_data.sender = ssdp->addrbuf;
+                    search_data.senderlen = ssdp->addrbuflen;
                 }
                 else if (strcmp(line, "NOTIFY * HTTP/1.1") == 0)
                 {
