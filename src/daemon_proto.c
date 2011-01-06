@@ -345,7 +345,9 @@ bool pkg_peek(buf_t buf, pkg_t* pkg)
             else
             {
                 /* skip package */
+                assert(false);
                 buf_skip(buf, 6 + pkglen);
+                continue;
             }
         }
 
