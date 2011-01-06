@@ -875,7 +875,7 @@ static bool parse_location(const char* location, char** proto,
     }
     if (tmp[0] == '[')
     {
-        pos = strstr(tmp, ']:');
+        pos = strstr(tmp, "]:");
     }
     else
     {
