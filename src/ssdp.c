@@ -230,7 +230,7 @@ bool ssdp_search_response(ssdp_t ssdp, ssdp_search_t* search,
     assert(search && notify && search->host && search->st && search->sender &&
            notify->expires >= time(NULL) && notify->usn);
     inet = select_inet(ssdp, search->sender, search->senderlen);
-    if (inet == NULL || inet->wsock < 0)
+    if (inet == NULL || inet->rsock < 0)
     {
         return false;
     }
@@ -251,7 +251,7 @@ bool ssdp_search_response(ssdp_t ssdp, ssdp_search_t* search,
     resp_addheader(resp, "ST", search->st);
     resp_addheader(resp, "USN", notify->usn);
     resp_addheader(resp, "Location", notify->location);
-    ret = resp_send(resp, inet->wsock, search->sender, search->senderlen,
+    ret = resp_send(resp, inet->rsock, search->sender, search->senderlen,
                     ssdp->log);
     resp_free(resp);
     return ret;
