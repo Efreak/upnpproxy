@@ -11,6 +11,7 @@ size_t vector_size(vector_t vector);
 void* vector_get(vector_t vector, size_t idx);
 void vector_set(vector_t vector, size_t idx, const void* data);
 void vector_insert(vector_t vector, size_t idx, const void* data);
+void* vector_add(vector_t vector);
 
 void vector_push(vector_t vector, const void* data);
 void* vector_pop(vector_t vector, void* data);

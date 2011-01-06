@@ -40,6 +40,36 @@ void* vector_get(vector_t vector, size_t idx)
     return vector->data + (idx * vector->elementsize);
 }
 
+void* vector_add(vector_t vector)
+{
+    void* ptr;
+    if (vector->count == vector->size)
+    {
+        size_t ns = vector->size * 2;
+        char* tmp;
+        if (ns < vector->count)
+            ns = vector->count;
+        if (ns < 10)
+            ns = 10;
+        tmp = realloc(vector->data, ns * vector->elementsize);
+        if (tmp == NULL)
+        {
+            ns = vector->count;
+            tmp = realloc(vector->data, ns * vector->elementsize);
+            if (tmp == NULL)
+            {
+                return NULL;
+            }
+        }
+        vector->data = tmp;
+        vector->size = ns;
+    }
+    ptr = vector->data + (vector->count * vector->elementsize);
+    ++vector->count;
+    memset(ptr, 0, vector->elementsize);
+    return ptr;
+}
+
 void vector_set(vector_t vector, size_t idx, const void* data)
 {
     if (idx >= vector->count)
