@@ -37,6 +37,17 @@ static int domain(int family)
     return 0;
 }
 
+struct sockaddr* socket_allocate_addrbuffer(socklen_t* size)
+{
+#if HAVE_INET6
+    socklen_t s = MAX(sizeof(struct sockaddr_in), sizeof(struct sockaddr_in6));
+#else
+    socklen_t s = sizeof(struct sockaddr_in);
+#endif
+    if (size != NULL) *size = s;
+    return calloc(1, s);
+}
+
 struct sockaddr* parse_addr(const char* addr, uint16_t port, socklen_t *addrlen,
                             bool allow_dnslookup)
 {
@@ -68,8 +79,7 @@ struct sockaddr* parse_addr(const char* addr, uint16_t port, socklen_t *addrlen,
         return (struct sockaddr*)a;
     }
     {
-        void* data = calloc(1, MAX(sizeof(struct sockaddr_in),
-                                   sizeof(struct sockaddr_in6)));
+        void* data = socket_allocate_addrbuffer(NULL);
         if (data == NULL)
             return NULL;
         if (inet_pton(AF_INET6, addr,
@@ -152,26 +162,62 @@ struct sockaddr* parse_addr(const char* addr, uint16_t port, socklen_t *addrlen,
     return NULL;
 }
 
+static socket_t socket_listen2(int type, socket_t presock,
+                               const struct sockaddr* addr, socklen_t addrlen)
+{
+    socket_t sock;
+    if (presock >= 0)
+    {
+        sock = presock;
+    }
+    else
+    {
+        sock = socket(domain(addr->sa_family), type, 0);
+        if (sock < 0)
+        {
+            return -1;
+        }
+    }
+    {
+        int reuse = 1;
+        setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+    }
+    if (bind(sock, addr, addrlen))
+    {
+        close(sock);
+        return -1;
+    }
+    if (type == SOCK_STREAM)
+    {
+        if (listen(sock, 5))
+        {
+            close(sock);
+            return -1;
+        }
+    }
+    return sock;
+}
+
 static socket_t socket_listen(int type, const char* bindaddr, uint16_t port)
 {
-    socklen_t _bindlen = 0;
-    struct sockaddr* _bind;
-    socket_t sock;
+    socklen_t addrlen = 0;
+    struct sockaddr* addr;
+    socket_t sock = -1;
     if (bindaddr == NULL)
     {
         size_t a;
         for (a = 0; a < 2; ++a)
         {
-            _bind = parse_addr(a == 0 ? IPV4_ANY : IPV6_ANY, port, &_bindlen,
-                               false);
-            if (_bind == NULL)
+            addr = parse_addr(a == 0 ? IPV4_ANY : IPV6_ANY, port, &addrlen,
+                              false);
+            if (addr == NULL)
             {
                 continue;
             }
-            sock = socket(domain(_bind->sa_family), type, 0);
+            sock = socket(domain(addr->sa_family), type, 0);
             if (sock < 0)
             {
-                free(_bind);
+                free(addr);
                 continue;
             }
             break;
@@ -183,37 +229,15 @@ static socket_t socket_listen(int type, const char* bindaddr, uint16_t port)
     }
     else
     {
-        _bind = parse_addr(bindaddr, port, &_bindlen, true);
-        if (_bind == NULL)
+        addr = parse_addr(bindaddr, port, &addrlen, true);
+        if (addr == NULL)
         {
             return -1;
         }
     }
-    sock = socket(domain(_bind->sa_family), type, 0);
-    if (sock < 0)
-    {
-        free(_bind);
-        return -1;
-    }
-    {
-        int reuse = 1;
-        setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
-    }
-    if (bind(sock, _bind, _bindlen))
-    {
-        close(sock);
-        free(_bind);
-        return -1;
-    }
-    free(_bind);
-    if (type == SOCK_STREAM)
-    {
-        if (listen(sock, 5))
-        {
-            close(sock);
-            return -1;
-        }
-    }
+
+    sock = socket_listen2(type, sock, addr, addrlen);
+    free(addr);
     return sock;
 }
 
@@ -265,6 +289,16 @@ socket_t socket_tcp_listen(const char* bindaddr, uint16_t port)
 socket_t socket_udp_listen(const char* bindaddr, uint16_t port)
 {
     return socket_listen(SOCK_DGRAM, bindaddr, port);
+}
+
+socket_t socket_tcp_listen2(const struct sockaddr* addr, socklen_t addrlen)
+{
+    return socket_listen2(SOCK_STREAM, -1, addr, addrlen);
+}
+
+socket_t socket_udp_listen2(const struct sockaddr* addr, socklen_t addrlen)
+{
+    return socket_listen2(SOCK_DGRAM, -1, addr, addrlen);
 }
 
 socket_t socket_tcp_connect(const char* host, uint16_t port, bool block)
@@ -505,6 +539,49 @@ ssize_t socket_write(socket_t sock, const void* data, size_t max)
     }
 }
 
+ssize_t socket_udp_read(socket_t sock, void* data, size_t max,
+                        struct sockaddr* addr, socklen_t* addrlen)
+{
+    ssize_t ret;
+    for (;;)
+    {
+        ret = recvfrom(sock, data, max, 0, addr, addrlen);
+        if (ret < 0)
+        {
+            if (errno == EINTR)
+            {
+                continue;
+            }
+        }
+        return ret;
+    }
+}
+
+ssize_t socket_udp_write(socket_t sock, const void* data, size_t max,
+                         struct sockaddr* addr, socklen_t addrlen)
+{
+    ssize_t ret;
+    for (;;)
+    {
+        if (addr != NULL)
+        {
+            ret = sendto(sock, data, max, 0, addr, addrlen);
+        }
+        else
+        {
+            ret = send(sock, data, max, 0);
+        }
+        if (ret < 0)
+        {
+            if (errno == EINTR)
+            {
+                continue;
+            }
+        }
+        return ret;
+    }
+}
+
 bool socket_blockingerror(socket_t sock)
 {
     return errno == EAGAIN;
@@ -610,14 +687,8 @@ void addr_setport(struct sockaddr* addr, socklen_t addrlen, uint16_t newport)
 
 struct sockaddr* socket_getpeeraddr(socket_t sock, socklen_t *addrlen)
 {
-    struct sockaddr* addr;
     socklen_t len;
-#if HAVE_INET6
-    len = MAX(sizeof(struct sockaddr_in6), sizeof(struct sockaddr_in));
-#else
-    len = sizeof(struct sockaddr_in);
-#endif
-    addr = calloc(1, len);
+    struct sockaddr* addr = socket_allocate_addrbuffer(&len);
     if (getpeername(sock, addr, &len))
     {
         free(addr);
@@ -632,14 +703,8 @@ struct sockaddr* socket_getpeeraddr(socket_t sock, socklen_t *addrlen)
 
 struct sockaddr* socket_getsockaddr(socket_t sock, socklen_t *addrlen)
 {
-    struct sockaddr* addr;
     socklen_t len;
-#if HAVE_INET6
-    len = MAX(sizeof(struct sockaddr_in6), sizeof(struct sockaddr_in));
-#else
-    len = sizeof(struct sockaddr_in);
-#endif
-    addr = calloc(1, len);
+    struct sockaddr* addr = socket_allocate_addrbuffer(&len);
     if (getsockname(sock, addr, &len))
     {
         free(addr);

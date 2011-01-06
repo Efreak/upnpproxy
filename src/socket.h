@@ -19,6 +19,9 @@ extern const char* IPV6_ANY;
 socket_t socket_tcp_listen(const char* bindaddr, uint16_t port);
 socket_t socket_udp_listen(const char* bindaddr, uint16_t port);
 
+socket_t socket_tcp_listen2(const struct sockaddr* addr, socklen_t addrlen);
+socket_t socket_udp_listen2(const struct sockaddr* addr, socklen_t addrlen);
+
 socket_t socket_tcp_connect(const char* host, uint16_t port, bool block);
 socket_t socket_udp_connect(const char* host, uint16_t port, bool block);
 
@@ -38,6 +41,15 @@ bool socket_multicast_setttl(socket_t sock, unsigned char ttl);
 
 ssize_t socket_read(socket_t sock, void* data, size_t max);
 ssize_t socket_write(socket_t sock, const void* data, size_t max);
+
+/* Addr may be NULL */
+ssize_t socket_udp_read(socket_t sock, void* data, size_t max,
+                        struct sockaddr* addr, socklen_t* addrlen);
+/* Addr may be NULL */
+ssize_t socket_udp_write(socket_t sock, const void* data, size_t max,
+                         struct sockaddr* addr, socklen_t addrlen);
+
+struct sockaddr* socket_allocate_addrbuffer(socklen_t* size);
 
 bool socket_blockingerror(socket_t sock);
 /* sock may be -1 as we might want the error causing the socket not to be
