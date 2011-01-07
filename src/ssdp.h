@@ -16,7 +16,7 @@ typedef struct _ssdp_search_t
     struct sockaddr* sender;
     socklen_t senderlen;
     char* s, * st;
-    uint mx;
+    unsigned int mx;
 } ssdp_search_t;
 
 typedef struct _ssdp_notify_t

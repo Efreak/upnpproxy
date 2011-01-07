@@ -256,6 +256,7 @@ bool ssdp_search_response(ssdp_t ssdp, ssdp_search_t* search,
     http_resp_t resp;
     bool ret;
     inet_t* inet;
+    unsigned int delay;
     assert(search && notify && search->host && search->st && search->sender &&
            notify->expires >= time(NULL) && notify->usn);
     inet = select_inet(ssdp, search->sender, search->senderlen);
@@ -281,6 +282,16 @@ bool ssdp_search_response(ssdp_t ssdp, ssdp_search_t* search,
     resp_addheader(resp, "USN", notify->usn);
     resp_addheader(resp, "Location", notify->location);
     if (search->mx <= 0)
+    {
+        delay = 0;
+    }
+    else
+    {
+        /* Max delay, 2 hours and assume we took 0.5 seconds for processing */
+        if (search->mx > 2 * 60 * 60) search->mx = 2 * 60 * 60;
+        delay = rand() % ((search->mx * 1000) - 500);
+    }
+    if (delay <= 100)
     {
         ret = resp_send(resp, inet->rsock, search->sender, search->senderlen,
                         ssdp->log);
@@ -313,7 +324,7 @@ bool ssdp_search_response(ssdp_t ssdp, ssdp_search_t* search,
         search_response->senderlen = search->senderlen;
         memcpy(search_response->sender, search->sender, search->senderlen);
         search_response->timer = timers_add(ssdp->timers,
-                                            (search->mx * 1000) - 200,
+                                            delay,
                                             search_response,
                                             search_response_cb);
         ret = true;
