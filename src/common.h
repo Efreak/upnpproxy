@@ -9,6 +9,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "compat.h"
+
 #ifdef DEBUG
 # include <assert.h>
 #else
