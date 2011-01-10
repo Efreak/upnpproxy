@@ -19,6 +19,37 @@
 # define MAX(__x, __y) (((__x) > (__y)) ? (__x) : (__y))
 #endif
 
+#if !HAVE_INET_NTOP
+const char* rpl_inet_ntop(int af, const void* src, char* dst, size_t size)
+{
+    if (af == AF_INET)
+    {
+        char* ret = inet_ntoa(*((const struct in_addr *)src));
+        size_t retlen = strlen(ret);
+        if (size > 0)
+        {
+            memcpy(dst, ret, retlen < size ? retlen + 1 : size);
+            dst[size - 1] = '\0';
+        }
+        return dst;
+    }
+    return NULL;
+}
+#dst inet_ntop rpl_inet_ntop
+#endif
+
+#if !HAVE_INET_PTON
+int rpl_inet_pton(int af, const char* src, void* dst)
+{
+    if (af == AF_INET)
+    {
+        return inet_aton(str, (struct in_addr *)dst);
+    }
+    return 0;
+}
+#define inet_pton rpl_inet_pton
+#endif
+
 const char* IPV4_ANY = "IPV4";
 const char* IPV6_ANY = "IPV6";
 
@@ -83,7 +114,7 @@ struct sockaddr* parse_addr(const char* addr, uint16_t port, socklen_t *addrlen,
         if (data == NULL)
             return NULL;
         if (inet_pton(AF_INET6, addr,
-                      &(((struct sockaddr_in6*)data)->sin6_addr)) == 1)
+                      &(((struct sockaddr_in6*)data)->sin6_addr)) != 0)
         {
             struct sockaddr_in6* a = data;
             a->sin6_family = AF_INET6;
@@ -92,7 +123,7 @@ struct sockaddr* parse_addr(const char* addr, uint16_t port, socklen_t *addrlen,
             return data;
         }
         if (inet_pton(AF_INET, addr,
-                      &(((struct sockaddr_in*)data)->sin_addr)) == 1)
+                      &(((struct sockaddr_in*)data)->sin_addr)) != 0)
         {
             struct sockaddr_in* a = data;
             a->sin_family = AF_INET;
@@ -131,7 +162,7 @@ struct sockaddr* parse_addr(const char* addr, uint16_t port, socklen_t *addrlen,
 #else
     {
         struct in_addr data;
-        if (inet_pton(AF_INET, addr, &data) == 0)
+        if (inet_pton(AF_INET, addr, &data) != 0)
         {
             struct sockaddr_in* a = calloc(1, sizeof(struct sockaddr_in));
             if (a == NULL)
@@ -615,7 +646,7 @@ bool addrstr_is_ipv4(const char* addr)
     {
         return true;
     }
-    return inet_pton(AF_INET, addr, &tmp) == 1;
+    return inet_pton(AF_INET, addr, &tmp) != 0;
 }
 
 bool addrstr_is_ipv6(const char* addr)
@@ -627,7 +658,7 @@ bool addrstr_is_ipv6(const char* addr)
 #if HAVE_INET6
     {
         struct in6_addr tmp;
-        return inet_pton(AF_INET6, addr, &tmp) == 1;
+        return inet_pton(AF_INET6, addr, &tmp) != 0;
     }
 #else
     return false;
