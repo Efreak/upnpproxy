@@ -17,6 +17,6 @@
 #define HAVE_STRNLEN 1
 #define HAVE_GETLINE 1
 #define HAVE_GETC_UNLOCKED 1
-#define HAVE_UNGETC_UNLOCKED 1
+#define HAVE_UNGETC_UNLOCKED 0
 
 #endif
