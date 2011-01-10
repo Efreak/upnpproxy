@@ -6,8 +6,12 @@
 #endif
 
 #include <stdlib.h>
-#include <stdint.h>
 #include <stdbool.h>
+#if HAVE_STDINT_H
+# include <stdint.h>
+#elif HAVE_INTTYPES_H
+# include <inttypes.h>
+#endif
 
 #include "compat.h"
 

@@ -105,5 +105,5 @@ ok = false;
 }
 
 #if HAVE_GETLINE
-# include "rpl_getline.c"
+# include "rpl_getline.x"
 #endif

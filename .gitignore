@@ -1,1 +1,17 @@
 *.o
+Makefile.in
+Makefile
+.deps
+config.h
+config.h.in
+compile
+configure
+aclocal.m4
+autom4te.cache
+depcomp
+install-sh
+missing
+stamp-h1
+config.log
+config.status
+*.dSYM
