@@ -61,7 +61,7 @@ bool log_reopen(log_t log, const char* url)
     }
     else if (pos - url == 6 && memcmp(url, "syslog", 6) == 0)
     {
-        int facilty;
+        int facilty = LOG_DAEMON;
         ++pos;
         fh = NULL;
         if (log->fh == NULL)

@@ -131,8 +131,8 @@ static void write_nullstr(write_ptr_t wptr, const char* str)
 bool pkg_write(buf_t buf, pkg_t* pkg)
 {
     struct _write_ptr_t wptr;
-    uint32_t pkglen;
-    uint8_t pkgtype;
+    uint32_t pkglen = 0;
+    uint8_t pkgtype = 0;
     wptr.totavail = buf_wavail(buf);
     if (wptr.totavail < 6)
     {
@@ -358,7 +358,6 @@ bool pkg_peek(buf_t buf, pkg_t* pkg)
             {
                 /* If we got one big data package larger than the buffer,
                  * return it in parts */
-                size_t avail = rptr.totavail - 11;
                 buf_skip(buf, 6);
                 rptr.totavail -= 6;
                 rptr.buf = buf;
