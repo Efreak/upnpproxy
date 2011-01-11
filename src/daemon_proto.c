@@ -178,7 +178,7 @@ bool pkg_write(buf_t buf, pkg_t* pkg)
         }
         break;
     }
-    if (pkglen > wptr.totavail)
+    if (6 + pkglen > wptr.totavail)
     {
         return false;
     }
@@ -546,7 +546,7 @@ void pkg_read(buf_t buf, pkg_t* pkg)
     {
         /* pkg_peek cut a DATA_TUNNEL package in two. So write a new header
          * so the next call to pkg_peek collects the next one */
-        uint32_t pkglen = 11 + pkg->tmp1;
+        uint32_t pkglen = 5 + pkg->tmp1;
         uint8_t header[11];
         struct _write_ptr_t wptr;
         assert(pkg->tmp2 == 1);
