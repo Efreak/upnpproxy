@@ -1,5 +1,7 @@
-test-getline
 test-buf
 test-buf.log
+test-getline
 test-getline.log
+test-proto
+test-proto.log
 test-suite.log
