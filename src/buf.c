@@ -104,7 +104,7 @@ size_t buf_wmove(buf_t buf, size_t size)
     }
     else
     {
-        assert(buf->rptr != buf->wptr || !buf->full);
+        assert(buf->rptr != buf->wptr || !buf->full || size == 0);
         assert(buf->wptr + size <= buf->end);
         buf->wptr += size;
         if (buf->wptr == buf->end)
