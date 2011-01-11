@@ -552,7 +552,7 @@ void pkg_read(buf_t buf, pkg_t* pkg)
         assert(pkg->tmp2 == 1);
         assert(pkg->content.data_tunnel.size >= 11);
         buf_rmove(buf, pkg->content.data_tunnel.size - 11);
-        assert(buf_ravail(buf) >= pkglen);
+        assert(buf_ravail(buf) >= 11);
         wptr.ptr = wptr.org = (char*)header;
         wptr.buf = NULL;
         wptr.ptravail = 11 + 1; /* the last byte is to trick write_raw not to
