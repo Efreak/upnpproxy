@@ -368,7 +368,6 @@ bool pkg_peek(buf_t buf, pkg_t* pkg)
                 pkg->content.data_tunnel.local = read_uint8(&rptr) != 0;
                 pkg->content.data_tunnel.size = pkglen - 5;
 
-                assert(avail == rptr.ptravail || (avail - rptr.ptravail) >= 11);
                 pkg->content.data_tunnel.data = (char*)rptr.ptr;
                 pkg->tmp1 = pkg->content.data_tunnel.size - rptr.ptravail;
                 pkg->tmp2 = 0x81;
@@ -419,9 +418,7 @@ bool pkg_peek(buf_t buf, pkg_t* pkg)
                 ptr += 4;
                 if (len > 0)
                 {
-                    pkg->content.new_service.server = malloc(len + 1);
-                    memcpy(pkg->content.new_service.server, ptr, len);
-                    pkg->content.new_service.server[len] = '\0';
+                    pkg->content.new_service.server = (char*)ptr;
                     ptr += len;
                 }
                 else
@@ -433,9 +430,7 @@ bool pkg_peek(buf_t buf, pkg_t* pkg)
                 ptr += 4;
                 if (len > 0)
                 {
-                    pkg->content.new_service.opt = malloc(len + 1);
-                    memcpy(pkg->content.new_service.opt, ptr, len);
-                    pkg->content.new_service.opt[len] = '\0';
+                    pkg->content.new_service.opt = (char*)ptr;
                     ptr += len;
                 }
                 else
@@ -533,6 +528,14 @@ void pkg_read(buf_t buf, pkg_t* pkg)
     if ((pkg->tmp2 & 0x80) == 0)
     {
         pkg_freecontent(pkg);
+    }
+    else
+    {
+        /* Bit of an ugly hack */
+        if (pkg->type == PKG_NEW_SERVICE)
+        {
+            free(pkg->content.new_service.nls);
+        }
     }
     pkg->tmp2 &= 0x7f;
     if (pkg->tmp2 == 0)
