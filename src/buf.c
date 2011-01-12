@@ -324,3 +324,73 @@ size_t buf_replace(buf_t buf, const void* data, size_t size)
         return done + avail;
     }
 }
+
+bool buf_resize(buf_t buf, size_t newsize)
+{
+    size_t current = buf->end - buf->data;
+    bool ret = false;
+    size_t size;
+
+    if (newsize < current)
+    {
+        if (newsize == 0)
+        {
+            return false;
+        }
+        if (buf_ravail(buf) > newsize)
+        {
+            /* Can't make the buffer smaller than the amount of data in it */
+            return false;
+        }
+    }
+    else if (newsize == current)
+    {
+        return true;
+    }
+
+    if (buf->rptr < buf->wptr || (buf->rptr == buf->wptr && !buf->full))
+    {
+        char* tmp;
+        size = buf->wptr - buf->rptr;
+        memmove(buf->rptr, buf->data, size);
+        tmp = realloc(buf, sizeof(struct _buf_t) + newsize);
+        if (tmp != NULL)
+        {
+            ret = true;
+            buf = (buf_t)tmp;
+            buf->data = tmp + sizeof(struct _buf_t);
+            buf->end = buf->data + newsize;
+        }
+    }
+    else
+    {
+        /* Fallback case, do a full copy */
+        char* tmp;
+        size = buf_ravail(buf);
+        tmp = malloc(sizeof(struct _buf_t) + newsize);
+        if (tmp == NULL)
+        {
+            return false;
+        }
+        ret = true;
+        buf_read(buf, tmp + sizeof(struct _buf_t), size);
+        assert(buf_ravail(buf) == 0);
+        free(buf);
+        buf = (buf_t)tmp;
+        buf->data = tmp + sizeof(struct _buf_t);
+        buf->end = buf->data + newsize;
+    }
+
+    buf->rptr = buf->data;
+    buf->wptr = buf->data + size;
+    if ((buf->full = (buf->wptr == buf->end)))
+    {
+        buf->wptr = buf->data;
+    }
+    return true;
+}
+
+size_t buf_size(buf_t buf)
+{
+    return buf->end - buf->data;
+}

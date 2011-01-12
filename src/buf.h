@@ -38,4 +38,7 @@ size_t buf_peek(buf_t buf, void* data, size_t size);
  * the wptr and does not move the rptr - so more like buf_peek but it writes */
 size_t buf_replace(buf_t buf, const void* data, size_t size);
 
+bool buf_resize(buf_t buf, size_t newsize);
+size_t buf_size(buf_t buf);
+
 #endif /* BUF_H */
