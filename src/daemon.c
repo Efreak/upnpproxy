@@ -560,12 +560,36 @@ static char* find_upnp_version(char* urn, unsigned int* version)
     /* urn:schemas-upnp-org:service:ConnectionManager:2 */
     /* urn:schemas-upnp-org:device:MediaServer:2 */
     /* urn:microsoft.com:service:X_MS_MediaReceiverRegistrar:1 */
-    char* a = strchr(urn, ':'), * b, * c, * d;
+    /* uuid:*::urn:schemas-upnp-org:device:MediaServer:2 */
+    char* a, * b, * c, * d;
     unsigned long tmp;
     assert(version != NULL);
     *version = 0;
-    if (a == NULL)
-        return NULL;
+    if (strncmp(urn, "urn:", 4) == 0)
+    {
+        a = urn + 3;
+    }
+    else
+    {
+        a = urn;
+        for (;;)
+        {
+            b = strstr(a, "::");
+            if (b == NULL)
+            {
+                return NULL;
+            }
+            if (strncmp(b, "::urn:", 6) == 0)
+            {
+                break;
+            }
+            a = b + 2;
+        }
+        a = b + 5;
+    }
+
+    assert(memcmp(a - 3, "urn:", 4) == 0);
+
     b = strchr(a + 1, ':');
     if (b == NULL)
         return NULL;
@@ -574,8 +598,6 @@ static char* find_upnp_version(char* urn, unsigned int* version)
         return NULL;
     d = strchr(c + 1, ':');
     if (d == NULL)
-        return NULL;
-    if ((a - urn) != 3 || memcmp(urn, "urn", 3) != 0)
         return NULL;
     ++d;
     if (*d == '\0')
