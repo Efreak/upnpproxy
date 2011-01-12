@@ -79,6 +79,9 @@ typedef struct _localservice_t
     char* service;
     char* opt;
     char* nls;
+    char* service_version_pos;
+    char* usn_version_pos;
+    unsigned int version_max;
     time_t expires;
     timecb_t expirecb;
     daemon_t daemon;
@@ -89,6 +92,9 @@ typedef struct _remoteservice_t
     uint32_t source_id;
     server_t* source;
     ssdp_notify_t notify;
+    char* nt_version_pos;
+    char* usn_version_pos;
+    unsigned int version_max;
     char* host;
     socket_t sock;
     timecb_t touchcb;
@@ -548,10 +554,58 @@ static char* find_config(void)
     return strdup(SYSCONFDIR "/upnpproxy.conf");
 }
 
+static char* find_upnp_version(char* urn, unsigned int* version)
+{
+    /* urn:schemas-upnp-org:service:ContentDirectory:2 */
+    /* urn:schemas-upnp-org:service:ConnectionManager:2 */
+    /* urn:schemas-upnp-org:device:MediaServer:2 */
+    /* urn:microsoft.com:service:X_MS_MediaReceiverRegistrar:1 */
+    char* a = strchr(urn, ':'), * b, * c, * d;
+    unsigned long tmp;
+    if (a == NULL)
+        return NULL;
+    b = strchr(a + 1, ':');
+    if (b == NULL)
+        return NULL;
+    c = strchr(b + 1, ':');
+    if (c == NULL)
+        return NULL;
+    d = strchr(c + 1, ':');
+    if (d == NULL)
+        return NULL;
+    if ((a - urn) != 3 || memcmp(urn, "urn", 3) != 0)
+        return NULL;
+    ++d;
+    if (*d == '\0')
+        return NULL;
+    errno = 0;
+    tmp = strtoul(d, &a, 10);
+    if (errno || !a || *a || tmp >= 1000)
+    {
+        return NULL;
+    }
+    *version = (unsigned int)tmp;
+    return d;
+}
+
+static inline bool same_upnp_version(const char* search_urn, const char* search_pos, unsigned int search_version,
+                                     const char* urn, const char* pos, unsigned int max_version)
+{
+    if (pos == NULL || search_pos == NULL)
+        return false;
+    if ((search_pos - search_urn) != (pos - urn))
+        return false;
+    if (memcmp(search_urn, urn, pos - urn) != 0)
+        return false;
+    return search_version <= max_version;
+}
+
 static void daemon_ssdp_search_cb(void* userdata, ssdp_search_t* search)
 {
     daemon_t daemon = (daemon_t)userdata;
     size_t i;
+    char* st_version_pos = NULL;
+    unsigned int version;
     bool any;
     if (search->s != NULL && strcmp(search->s, daemon->ssdp_s) == 0)
     {
@@ -559,6 +613,10 @@ static void daemon_ssdp_search_cb(void* userdata, ssdp_search_t* search)
         return;
     }
     any = (strcmp(search->st, "ssdp:all") == 0);
+    if (!any)
+    {
+        st_version_pos = find_upnp_version(search->st, &version);
+    }
     for (i = map_begin(daemon->remotes); i != map_end(daemon->remotes);
          i = map_next(daemon->remotes, i))
     {
@@ -566,6 +624,25 @@ static void daemon_ssdp_search_cb(void* userdata, ssdp_search_t* search)
         if (any || strcmp(search->st, remote->notify.nt) == 0)
         {
             ssdp_search_response(daemon->ssdp, search, &(remote->notify));
+        }
+        else if (remote->nt_version_pos && st_version_pos)
+        {
+            if (same_upnp_version(search->st, st_version_pos, version,
+                                  remote->notify.nt, remote->nt_version_pos,
+                                  remote->version_max))
+            {
+                sprintf(remote->nt_version_pos, "%u", version);
+                if (remote->usn_version_pos != NULL)
+                {
+                    sprintf(remote->usn_version_pos, "%u", version);
+                }
+                ssdp_search_response(daemon->ssdp, search, &(remote->notify));
+                sprintf(remote->nt_version_pos, "%u", remote->version_max);
+                if (remote->usn_version_pos != NULL)
+                {
+                    sprintf(remote->usn_version_pos, "%u", remote->version_max);
+                }
+            }
         }
     }
 }
@@ -575,7 +652,8 @@ static bool daemon_add_local(daemon_t daemon, ssdp_notify_t* notify)
     localservice_t local, *localptr;
     time_t now = time(NULL);
     assert(notify->usn);
-    if (notify->location == NULL || notify->expires <= now)
+    if (notify->nt == NULL || notify->location == NULL ||
+        notify->expires <= now)
     {
         return false;
     }
@@ -592,6 +670,19 @@ static bool daemon_add_local(daemon_t daemon, ssdp_notify_t* notify)
     local.server = safestrdup(notify->server);
     local.opt = safestrdup(notify->opt);
     local.nls = safestrdup(notify->nls);
+
+    local.service_version_pos = find_upnp_version(local.service,
+                                                  &(local.version_max));
+    if (local.service_version_pos != NULL)
+    {
+        unsigned int x;
+        local.usn_version_pos = find_upnp_version(local.usn, &x);
+        if (x != local.version_max)
+        {
+            local.usn_version_pos = NULL;
+        }
+    }
+
     local.location = strdup(notify->location);
     local.expires = notify->expires;
     local.daemon = daemon;
@@ -627,8 +718,6 @@ static bool daemon_add_local(daemon_t daemon, ssdp_notify_t* notify)
 static void daemon_update_local(daemon_t daemon, localservice_t* local,
                                 ssdp_notify_t* notify)
 {
-    assert(strcmp(local->usn, notify->usn) == 0 &&
-           strcmp(local->service, notify->nt) == 0);
     if (notify->nts != NULL && strcmp(notify->nts, "ssdp:byebye") == 0)
     {
         map_remove(daemon->locals, local);
@@ -638,6 +727,26 @@ static void daemon_update_local(daemon_t daemon, localservice_t* local,
     {
         free(local->service);
         local->service = strdup(notify->nt);
+        local->service_version_pos = find_upnp_version(local->service,
+                                                       &(local->version_max));
+    }
+    if (strcmp(local->usn, notify->usn) != 0)
+    {
+        free(local->usn);
+        local->usn = strdup(notify->usn);
+        if (local->service_version_pos != NULL)
+        {
+            unsigned int x;
+            local->usn_version_pos = find_upnp_version(local->usn, &x);
+            if (x != local->version_max)
+            {
+                local->usn_version_pos = NULL;
+            }
+        }
+        else
+        {
+            local->usn_version_pos = NULL;
+        }
     }
     if (strcmp(local->location, notify->location) != 0)
     {
@@ -656,6 +765,16 @@ static void daemon_update_local(daemon_t daemon, localservice_t* local,
     {
         free(local->server);
         local->server = safestrdup(notify->server);
+    }
+    if (safestrcmp(local->nls, notify->nls) != 0)
+    {
+        free(local->nls);
+        local->nls = safestrdup(notify->nls);
+    }
+    if (safestrcmp(local->opt, notify->opt) != 0)
+    {
+        free(local->opt);
+        local->opt = safestrdup(notify->opt);
     }
     if (local->expires != notify->expires)
     {
@@ -680,18 +799,38 @@ static void daemon_ssdp_search_resp_cb(void* userdata, ssdp_search_t* search,
     daemon_t daemon = (daemon_t)userdata;
     size_t i;
     bool reset_nt = false;
+    char* service_pos, * usn_pos = NULL;
+    unsigned int version;
     assert(search->st && notify->usn);
     if (notify->nt == NULL)
     {
         notify->nt = search->st;
         reset_nt = true;
     }
+    service_pos = find_upnp_version(notify->nt, &version);
+    if (service_pos != NULL)
+    {
+        unsigned int x;
+        usn_pos = find_upnp_version(notify->usn, &x);
+        if (x != version)
+        {
+            usn_pos = NULL;
+        }
+    }
     for (i = map_begin(daemon->locals); i != map_end(daemon->locals);
          i = map_next(daemon->locals, i))
     {
         localservice_t* local = map_getat(daemon->locals, i);
-        if (strcmp(local->usn, notify->usn) == 0 &&
-            strcmp(local->service, notify->nt) == 0)
+        if ((strcmp(local->usn, notify->usn) == 0 &&
+             strcmp(local->service, notify->nt) == 0) ||
+            (same_upnp_version(notify->nt, service_pos, version,
+                               local->service, local->service_version_pos,
+                               local->version_max)
+             &&
+             ((local->usn_version_pos == NULL && usn_pos == NULL) ||
+              same_upnp_version(notify->usn, usn_pos, version,
+                                local->usn, local->usn_version_pos,
+                                local->version_max))))
         {
             daemon_update_local(daemon, local, notify);
             if (reset_nt) notify->nt = NULL;
@@ -706,11 +845,24 @@ static void daemon_ssdp_notify_cb(void* userdata, ssdp_notify_t* notify)
 {
     daemon_t daemon = (daemon_t)userdata;
     size_t i;
+    char* nt_pos, * usn_pos = NULL;
+    unsigned int version;
+    nt_pos = find_upnp_version(notify->nt, &version);
+    if (nt_pos != NULL)
+    {
+        unsigned int x;
+        usn_pos = find_upnp_version(notify->usn, &x);
+        if (x != version)
+        {
+            usn_pos = NULL;
+        }
+    }
     for (i = map_begin(daemon->remotes); i != map_end(daemon->remotes);
          i = map_next(daemon->remotes, i))
     {
         remoteservice_t* remote = map_getat(daemon->remotes, i);
-        if (strcmp(remote->notify.usn, notify->usn) == 0)
+        if (strcmp(remote->notify.usn, notify->usn) == 0 &&
+            strcmp(remote->notify.nt, notify->nt) == 0)
         {
             /* One of our own */
             return;
@@ -720,7 +872,16 @@ static void daemon_ssdp_notify_cb(void* userdata, ssdp_notify_t* notify)
          i = map_next(daemon->locals, i))
     {
         localservice_t* local = map_getat(daemon->locals, i);
-        if (strcmp(local->usn, notify->usn) == 0)
+        if ((strcmp(local->usn, notify->usn) == 0 &&
+             strcmp(local->service, notify->nt) == 0) ||
+            (same_upnp_version(notify->nt, nt_pos, version,
+                               local->service, local->service_version_pos,
+                               local->version_max)
+             &&
+             ((local->usn_version_pos == NULL && usn_pos == NULL) ||
+              same_upnp_version(notify->usn, usn_pos, version,
+                                local->usn, local->usn_version_pos,
+                                local->version_max))))
         {
             daemon_update_local(daemon, local, notify);
             return;
@@ -1229,6 +1390,20 @@ static void daemon_add_remote(daemon_t daemon, server_t* server,
     remote.notify.usn = strdup(new_service->usn);
     remote.notify.nt = strdup(new_service->service);
     remote.notify.expires = time(NULL) + REMOTE_EXPIRE_TTL;
+
+    remote.nt_version_pos = find_upnp_version(remote.notify.nt,
+                                              &remote.version_max);
+    if (remote.nt_version_pos != NULL)
+    {
+        unsigned int x;
+        remote.usn_version_pos = find_upnp_version(remote.notify.usn,
+                                                   &x);
+        if (x != remote.version_max)
+        {
+            remote.usn_version_pos = NULL;
+        }
+    }
+
     remoteptr = map_put(daemon->remotes, &remote);
     selector_add(daemon->selector, remote.sock, remoteptr,
                  remoteservice_read_cb, NULL);
