@@ -352,7 +352,7 @@ bool buf_resize(buf_t buf, size_t newsize)
     {
         char* tmp;
         size = buf->wptr - buf->rptr;
-        memmove(buf->rptr, buf->data, size);
+        memmove(buf->data, buf->rptr, size);
         tmp = realloc(buf, sizeof(struct _buf_t) + newsize);
         if (tmp != NULL)
         {
