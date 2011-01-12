@@ -325,27 +325,27 @@ size_t buf_replace(buf_t buf, const void* data, size_t size)
     }
 }
 
-bool buf_resize(buf_t buf, size_t newsize)
+buf_t buf_resize(buf_t buf, size_t newsize)
 {
     size_t current = buf->end - buf->data;
-    bool ret = false;
+    bool ok = false;
     size_t size;
 
     if (newsize < current)
     {
         if (newsize == 0)
         {
-            return false;
+            return NULL;
         }
         if (buf_ravail(buf) > newsize)
         {
             /* Can't make the buffer smaller than the amount of data in it */
-            return false;
+            return NULL;
         }
     }
     else if (newsize == current)
     {
-        return true;
+        return buf;
     }
 
     if (buf->rptr < buf->wptr || (buf->rptr == buf->wptr && !buf->full))
@@ -356,7 +356,7 @@ bool buf_resize(buf_t buf, size_t newsize)
         tmp = realloc(buf, sizeof(struct _buf_t) + newsize);
         if (tmp != NULL)
         {
-            ret = true;
+            ok = true;
             buf = (buf_t)tmp;
             buf->data = tmp + sizeof(struct _buf_t);
             buf->end = buf->data + newsize;
@@ -370,9 +370,9 @@ bool buf_resize(buf_t buf, size_t newsize)
         tmp = malloc(sizeof(struct _buf_t) + newsize);
         if (tmp == NULL)
         {
-            return false;
+            return NULL;
         }
-        ret = true;
+        ok = true;
         buf_read(buf, tmp + sizeof(struct _buf_t), size);
         assert(buf_ravail(buf) == 0);
         free(buf);
@@ -387,7 +387,7 @@ bool buf_resize(buf_t buf, size_t newsize)
     {
         buf->wptr = buf->data;
     }
-    return true;
+    return ok ? buf : NULL;
 }
 
 size_t buf_size(buf_t buf)

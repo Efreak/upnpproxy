@@ -1610,6 +1610,7 @@ static bool _tunnel_write_data(daemon_t daemon, tunnel_t* tunnel,
             if (buf_wavail(tunnel->out) == 0)
             {
                 size_t s = buf_size(tunnel->out), ns;
+                buf_t nbuf;
                 ns = s * 2;
                 if (ns < s + size)
                     ns = s + size;
@@ -1624,12 +1625,14 @@ static bool _tunnel_write_data(daemon_t daemon, tunnel_t* tunnel,
                     log_printf(daemon->log, LVL_WARN,
                                "Too much data for tunnel, increasing buffer (%lu + %lu needed)", s, size);
                 }
-                if (!buf_resize(tunnel->out, ns))
+                nbuf = buf_resize(tunnel->out, ns);
+                if (nbuf == NULL)
                 {
                     log_printf(daemon->log, LVL_WARN,
                                "Too much data for tunnel, (%lu lost)", size);
                     return false;
                 }
+                tunnel->out = nbuf;
                 continue;
             }
         }
