@@ -29,7 +29,7 @@ static const time_t REMOTE_EXPIRE_TTL = 9000;
 static const size_t SERVER_BUFFER_IN = 8192;
 static const size_t SERVER_BUFFER_OUT = 8192;
 static const size_t TUNNEL_BUFFER_IN = 4096;
-static const size_t TUNNEL_BUFFER_OUT = 4096;
+static const size_t TUNNEL_BUFFER_OUT = 8192;
 static const size_t TUNNEL_BUFFER_PREOUT = 1024;
 
 /* Every 30 sec */
