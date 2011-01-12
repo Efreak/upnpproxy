@@ -562,6 +562,8 @@ static char* find_upnp_version(char* urn, unsigned int* version)
     /* urn:microsoft.com:service:X_MS_MediaReceiverRegistrar:1 */
     char* a = strchr(urn, ':'), * b, * c, * d;
     unsigned long tmp;
+    assert(version != NULL);
+    *version = 0;
     if (a == NULL)
         return NULL;
     b = strchr(a + 1, ':');
