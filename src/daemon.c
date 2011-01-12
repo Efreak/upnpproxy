@@ -752,23 +752,8 @@ static bool daemon_setup_ssdp(daemon_t daemon)
     if (search.host != NULL)
     {
         search.s = daemon->ssdp_s;
-        search.st = (char*)"upnp:rootdevice";
-        search.mx = 3;
-        ssdp_search(daemon->ssdp, &search);
-
-        search.st = (char*)"urn:schemas-upnp-org:service:ContentDirectory:1";
-        ssdp_search(daemon->ssdp, &search);
-
-        search.st = (char*)"urn:schemas-upnp-org:service:ContentDirectory:2";
-        ssdp_search(daemon->ssdp, &search);
-
-        search.st = (char*)"urn:schemas-upnp-org:service:MediaServer:1";
-        ssdp_search(daemon->ssdp, &search);
-
-        search.st = (char*)"urn:schemas-wifialliance-org:device:WFADevice:1";
-        ssdp_search(daemon->ssdp, &search);
-
         search.st = (char*)"ssdp:all";
+        search.mx = 3;
         ssdp_search(daemon->ssdp, &search);
 
         free(search.host);
