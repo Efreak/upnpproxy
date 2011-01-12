@@ -30,6 +30,7 @@ static const size_t SERVER_BUFFER_IN = 8192;
 static const size_t SERVER_BUFFER_OUT = 8192;
 static const size_t TUNNEL_BUFFER_IN = 4096;
 static const size_t TUNNEL_BUFFER_OUT = 8192;
+static const size_t TUNNEL_MAX_BUFFER_OUT = 10 * 1024 * 1024;
 static const size_t TUNNEL_BUFFER_PREOUT = 1024;
 
 /* Every 30 sec */
@@ -1605,13 +1606,32 @@ static bool _tunnel_write_data(daemon_t daemon, tunnel_t* tunnel,
         size -= wrote;
         if (size > 0)
         {
-            if (wrote == 0)
-            {
-                log_printf(daemon->log, LVL_WARN,
-                           "Too much data for tunnel (%lu lost)", size);
-                return false;
-            }
             daemon_tunnel_flush_output(tunnel);
+            if (buf_wavail(tunnel->out) == 0)
+            {
+                size_t s = buf_size(tunnel->out), ns;
+                ns = s * 2;
+                if (ns < s + size)
+                    ns = s + size;
+                if (ns > TUNNEL_MAX_BUFFER_OUT)
+                {
+                    log_printf(daemon->log, LVL_WARN,
+                               "Too much data for tunnel, (%lu lost)", size);
+                    return false;
+                }
+                else
+                {
+                    log_printf(daemon->log, LVL_WARN,
+                               "Too much data for tunnel, increasing buffer (%lu + %lu needed)", s, size);
+                }
+                if (!buf_resize(tunnel->out, ns))
+                {
+                    log_printf(daemon->log, LVL_WARN,
+                               "Too much data for tunnel, (%lu lost)", size);
+                    return false;
+                }
+                continue;
+            }
         }
     }
     return true;
