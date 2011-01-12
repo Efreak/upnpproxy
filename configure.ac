@@ -3,7 +3,7 @@ AC_CONFIG_MACRO_DIR([m4])
 
 AM_INIT_AUTOMAKE([dist-bzip2 foreign color-tests parallel-tests])
 
-AM_SILENT_RULES([yes])
+m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
 AC_ISC_POSIX
 AM_PROG_CC_STDC
@@ -39,9 +39,8 @@ AC_CHECK_HEADERS([stdint.h inttypes.h])
 
 AC_CHECK_FUNCS([strndup strnlen getline getc_unlocked ungetc_unlocked])
 
-AC_CHECK_FUNC([getopt],
-  AC_CHECK_FUNCS([getopt_long]),
-  AC_MSG_ERROR([need getopt]))
+AC_CHECK_FUNC([getopt],, AC_MSG_ERROR([need getopt]))
+AC_CHECK_FUNCS([getopt_long])
 
 # Network
 
