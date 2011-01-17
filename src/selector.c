@@ -105,6 +105,21 @@ void selector_chkread(selector_t selector, socket_t sock,
 {
     if (check_read)
     {
+#ifdef DEBUG
+        client_t* c;
+        size_t i;
+        for (i = 0, c = selector->client; i < selector->clients; ++i, ++c)
+        {
+            if (c->sock == sock)
+            {
+                assert(c->read_callback != NULL);
+                assert(!c->delete);
+                break;
+            }
+        }
+        assert(i < selector->clients);
+#endif
+
         FD_SET(sock, &selector->read_set);
     }
     else
@@ -118,6 +133,22 @@ void selector_chkwrite(selector_t selector, socket_t sock,
 {
     if (check_write)
     {
+#ifdef DEBUG
+        client_t* c;
+        size_t i;
+        for (i = 0, c = selector->client; i < selector->clients; ++i, ++c)
+        {
+            if (c->sock == sock)
+            {
+                assert(c->write_callback != NULL);
+                assert(!c->delete);
+                break;
+            }
+        }
+
+        assert(i < selector->clients);
+#endif
+
         FD_SET(sock, &selector->write_set);
     }
     else
@@ -230,6 +261,8 @@ bool selector_tick(selector_t selector, unsigned long timeout_ms)
             }
         }
     }
+
+    assert(ret == 0);
 
     selector->in_tick = false;
 
