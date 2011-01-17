@@ -20,7 +20,8 @@ daemon_SOURCES = daemon.c common.h \
 				 map.c map.h \
 				 vector.c vector.h \
 				 timers.c timers.h \
-				 compat.h compat.c rpl_getline.x
+				 compat.h compat.c rpl_getline.x \
+				 http_proxy.h http_proxy.c
 
 ssdp_mon_SOURCES = ssdp_mon.c common.h \
                    ssdp.c ssdp.h \

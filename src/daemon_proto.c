@@ -25,28 +25,28 @@ void pkg_old_service(pkg_t* pkg, uint32_t service_id)
     pkg->content.old_service.service_id = service_id;
 }
 
-void pkg_create_tunnel(pkg_t* pkg, uint32_t service_id, uint32_t tunnel_id, char* host)
+void pkg_create_tunnel(pkg_t* pkg, uint32_t service_id, uint32_t tunnel_id, char* host, uint16_t port)
 {
     pkg->type = PKG_CREATE_TUNNEL;
     assert(host != NULL);
     pkg->content.create_tunnel.service_id = service_id;
     pkg->content.create_tunnel.tunnel_id = tunnel_id;
     pkg->content.create_tunnel.host = host;
+    pkg->content.create_tunnel.port = port;
+}
+
+void pkg_setup_tunnel(pkg_t* pkg, uint32_t tunnel_id, bool ok, uint16_t port)
+{
+    pkg->type = PKG_SETUP_TUNNEL;
+    pkg->content.setup_tunnel.tunnel_id = tunnel_id;
+    pkg->content.setup_tunnel.ok = ok;
+    pkg->content.setup_tunnel.port = port;
 }
 
 void pkg_close_tunnel(pkg_t* pkg, uint32_t tunnel_id)
 {
     pkg->type = PKG_CLOSE_TUNNEL;
     pkg->content.close_tunnel.tunnel_id = tunnel_id;
-}
-
-void pkg_data_tunnel(pkg_t* pkg, uint32_t tunnel_id, bool local, void* data, uint32_t len)
-{
-    pkg->type = PKG_DATA_TUNNEL;
-    pkg->content.data_tunnel.tunnel_id = tunnel_id;
-    pkg->content.data_tunnel.local = local;
-    pkg->content.data_tunnel.data = data;
-    pkg->content.data_tunnel.size = len;
 }
 
 typedef struct _write_ptr_t
@@ -97,6 +97,14 @@ static void write_uint32(write_ptr_t wptr, uint32_t value)
     tmp[2] = (value >> 8) & 0xff;
     tmp[3] = value & 0xff;
     write_raw(wptr, tmp, 4);
+}
+
+static void write_uint16(write_ptr_t wptr, uint16_t value)
+{
+    uint8_t tmp[2];
+    tmp[0] = value >> 8;
+    tmp[1] = value & 0xff;
+    write_raw(wptr, tmp, 2);
 }
 
 static void write_uint8(write_ptr_t wptr, uint8_t value)
@@ -159,23 +167,15 @@ bool pkg_write(buf_t buf, pkg_t* pkg)
         break;
     case PKG_CREATE_TUNNEL:
         pkgtype = 10;
-        pkglen = 8 + 4 + strlen(pkg->content.create_tunnel.host);
+        pkglen = 8 + 4 + strlen(pkg->content.create_tunnel.host) + 2;
+        break;
+    case PKG_SETUP_TUNNEL:
+        pkgtype = 11;
+        pkglen = 4 + 1 + 2;
         break;
     case PKG_CLOSE_TUNNEL:
-        pkgtype = 11;
-        pkglen = 4;
-        break;
-    case PKG_DATA_TUNNEL:
         pkgtype = 12;
-        if (wptr.totavail < 1024 ||
-            pkg->content.data_tunnel.size < (wptr.totavail - 11))
-        {
-            pkglen = 5 + pkg->content.data_tunnel.size;
-        }
-        else
-        {
-            pkglen = 5 + (wptr.totavail - 11);
-        }
+        pkglen = 4;
         break;
     }
     if (6 + pkglen > wptr.totavail)
@@ -207,32 +207,19 @@ bool pkg_write(buf_t buf, pkg_t* pkg)
         write_uint32(&wptr, pkg->content.create_tunnel.service_id);
         write_uint32(&wptr, pkg->content.create_tunnel.tunnel_id);
         write_str(&wptr, pkg->content.create_tunnel.host);
+        write_uint16(&wptr, pkg->content.create_tunnel.port);
+        write_done(&wptr);
+        return true;
+    case PKG_SETUP_TUNNEL:
+        write_uint32(&wptr, pkg->content.setup_tunnel.tunnel_id);
+        write_uint8(&wptr, pkg->content.setup_tunnel.ok ? 1 : 0);
+        write_uint16(&wptr, pkg->content.setup_tunnel.port);
         write_done(&wptr);
         return true;
     case PKG_CLOSE_TUNNEL:
         write_uint32(&wptr, pkg->content.close_tunnel.tunnel_id);
         write_done(&wptr);
         return true;
-    case PKG_DATA_TUNNEL:
-        write_uint32(&wptr, pkg->content.data_tunnel.tunnel_id);
-        write_uint8(&wptr, pkg->content.data_tunnel.local ? 1 : 0);
-        if (pkglen - 5 == pkg->content.data_tunnel.size)
-        {
-            write_raw(&wptr, pkg->content.data_tunnel.data,
-                      pkg->content.data_tunnel.size);
-            write_done(&wptr);
-            return true;
-        }
-        else
-        {
-            assert(pkglen - 5 < pkg->content.data_tunnel.size);
-            write_raw(&wptr, pkg->content.data_tunnel.data, pkglen - 5);
-            pkg->content.data_tunnel.data = (char*)pkg->content.data_tunnel.data
-                + (pkglen - 5);
-            pkg->content.data_tunnel.size -= (pkglen - 5);
-            write_done(&wptr);
-            return false;
-        }
     default:
         assert(false);
         return false;
@@ -286,6 +273,13 @@ static uint32_t read_uint32(read_ptr_t rptr)
     return tmp[0] << 24 | tmp[1] << 16 | tmp[2] << 8 | tmp[3];
 }
 
+static uint16_t read_uint16(read_ptr_t rptr)
+{
+    uint8_t tmp[2];
+    read_raw(rptr, tmp, 2);
+    return tmp[0] << 8 | tmp[1];
+}
+
 static uint8_t read_uint8(read_ptr_t rptr)
 {
     uint8_t tmp;
@@ -333,53 +327,21 @@ bool pkg_peek(buf_t buf, pkg_t* pkg)
             | header[3];
         pkgtype = header[4];
         pkgversion = header[5];
+
+        if (rptr.totavail < 6 + pkglen)
+        {
+            /* need more data */
+            return false;
+        }
+
         if (pkgversion != 0 ||
             !((pkgtype >= 1 && pkgtype <= 2) ||
               (pkgtype >= 10 && pkgtype <= 12)))
         {
-            if (rptr.totavail < 6 + pkglen)
-            {
-                /* need more data */
-                return false;
-            }
-            else
-            {
-                /* skip package */
-                assert(false);
-                buf_skip(buf, 6 + pkglen);
-                continue;
-            }
-        }
-
-        if (rptr.totavail < 6 + pkglen)
-        {
-            if (buf_wavail(buf) == 0 && pkgtype == 12 &&
-                rptr.totavail >= 22)
-            {
-                /* If we got one big data package larger than the buffer,
-                 * return it in parts */
-                buf_skip(buf, 6);
-                rptr.totavail -= 6;
-                rptr.buf = buf;
-                rptr.ptr = rptr.org = buf_rptr(buf, &(rptr.ptravail));
-
-                pkg->type = PKG_DATA_TUNNEL;
-                pkg->content.data_tunnel.tunnel_id = read_uint32(&rptr);
-                pkg->content.data_tunnel.local = read_uint8(&rptr) != 0;
-                pkg->content.data_tunnel.size = pkglen - 5;
-
-                pkg->content.data_tunnel.data = (char*)rptr.ptr;
-                pkg->tmp1 = pkg->content.data_tunnel.size - rptr.ptravail;
-                pkg->tmp2 = 0x81;
-                pkg->content.data_tunnel.size = rptr.ptravail;
-                read_done(&rptr);
-                return true;
-            }
-            else
-            {
-                /* need more data */
-                return false;
-            }
+            /* skip package */
+            assert(false);
+            buf_skip(buf, 6 + pkglen);
+            continue;
         }
 
         buf_skip(buf, 6);
@@ -388,7 +350,7 @@ bool pkg_peek(buf_t buf, pkg_t* pkg)
         rptr.ptr = rptr.org = buf_rptr(buf, &(rptr.ptravail));
 
         pkg->tmp1 = 0;
-        pkg->tmp2 = 0;
+        pkg->tmp2 = false;
 
         switch (pkgtype)
         {
@@ -452,7 +414,7 @@ bool pkg_peek(buf_t buf, pkg_t* pkg)
                     pkg->content.new_service.nls = NULL;
                 }
                 pkg->tmp1 = (char*)ptr - rptr.org;
-                pkg->tmp2 = 0x80;
+                pkg->tmp2 = true;
                 return true;
             }
             else
@@ -476,45 +438,21 @@ bool pkg_peek(buf_t buf, pkg_t* pkg)
             pkg->content.create_tunnel.service_id = read_uint32(&rptr);
             pkg->content.create_tunnel.tunnel_id = read_uint32(&rptr);
             pkg->content.create_tunnel.host = read_str(&rptr);
+            pkg->content.create_tunnel.port = read_uint16(&rptr);
             read_done(&rptr);
             return true;
         case 11:
+            pkg->type = PKG_SETUP_TUNNEL;
+            pkg->content.setup_tunnel.tunnel_id = read_uint32(&rptr);
+            pkg->content.setup_tunnel.ok = read_uint8(&rptr) != 0;
+            pkg->content.setup_tunnel.port = read_uint16(&rptr);
+            read_done(&rptr);
+            return true;
+        case 12:
             pkg->type = PKG_CLOSE_TUNNEL;
             pkg->content.close_tunnel.tunnel_id = read_uint32(&rptr);
             read_done(&rptr);
             return true;
-        case 12:
-            pkg->type = PKG_DATA_TUNNEL;
-            pkg->content.data_tunnel.tunnel_id = read_uint32(&rptr);
-            pkg->content.data_tunnel.local = read_uint8(&rptr) != 0;
-            pkg->content.data_tunnel.size = pkglen - 5;
-            if (rptr.ptravail >= pkg->content.data_tunnel.size)
-            {
-                pkg->content.data_tunnel.data = (char*)rptr.ptr;
-                pkg->tmp1 =
-                    (rptr.ptr - rptr.org) + pkg->content.data_tunnel.size;
-                pkg->tmp2 = 0x80;
-                return true;
-            }
-            else if (rptr.ptravail > 11)
-            {
-                pkg->content.data_tunnel.data = (char*)rptr.ptr;
-                pkg->tmp1 = pkg->content.data_tunnel.size - rptr.ptravail;
-                pkg->tmp2 = 0x81;
-                pkg->content.data_tunnel.size = rptr.ptravail;
-                read_done(&rptr);
-                return true;
-            }
-            else
-            {
-                pkg->content.data_tunnel.data
-                    = malloc(pkg->content.data_tunnel.size);
-                read_raw(&rptr, pkg->content.data_tunnel.data,
-                         pkg->content.data_tunnel.size);
-                read_done(&rptr);
-                return true;
-            }
-            break;
         default:
             assert(false);
             buf_skip(buf, pkglen);
@@ -525,7 +463,7 @@ bool pkg_peek(buf_t buf, pkg_t* pkg)
 
 void pkg_read(buf_t buf, pkg_t* pkg)
 {
-    if ((pkg->tmp2 & 0x80) == 0)
+    if (!pkg->tmp2)
     {
         pkg_freecontent(pkg);
     }
@@ -537,35 +475,7 @@ void pkg_read(buf_t buf, pkg_t* pkg)
             free(pkg->content.new_service.nls);
         }
     }
-    pkg->tmp2 &= 0x7f;
-    if (pkg->tmp2 == 0)
-    {
-        buf_rmove(buf, pkg->tmp1);
-    }
-    else
-    {
-        /* pkg_peek cut a DATA_TUNNEL package in two. So write a new header
-         * so the next call to pkg_peek collects the next one */
-        uint32_t pkglen = 5 + pkg->tmp1;
-        uint8_t header[11];
-        struct _write_ptr_t wptr;
-        assert(pkg->tmp2 == 1);
-        assert(pkg->content.data_tunnel.size >= 11);
-        buf_rmove(buf, pkg->content.data_tunnel.size - 11);
-        assert(buf_ravail(buf) >= 11);
-        wptr.ptr = wptr.org = (char*)header;
-        wptr.buf = NULL;
-        wptr.ptravail = 11 + 1; /* the last byte is to trick write_raw not to
-                                 * sync */
-        wptr.totavail = wptr.ptravail;
-        write_uint32(&wptr, pkglen);
-        write_uint8(&wptr, 12);
-        write_uint8(&wptr, 0);
-        write_uint32(&wptr, pkg->content.data_tunnel.tunnel_id);
-        write_uint8(&wptr, pkg->content.data_tunnel.local ? 1 : 0);
-        assert(wptr.ptravail == 1);
-        buf_replace(buf, header, 11);
-    }
+    buf_rmove(buf, pkg->tmp1);
 }
 
 pkg_t* pkg_dup(const pkg_t* pkg)
@@ -593,21 +503,17 @@ pkg_t* pkg_dup(const pkg_t* pkg)
     case PKG_CREATE_TUNNEL:
         pkg_create_tunnel(ret, pkg->content.create_tunnel.service_id,
                           pkg->content.create_tunnel.tunnel_id,
-                          pkg->content.create_tunnel.host);
+                          pkg->content.create_tunnel.host,
+                          pkg->content.create_tunnel.port);
+        break;
+    case PKG_SETUP_TUNNEL:
+        pkg_setup_tunnel(ret, pkg->content.setup_tunnel.tunnel_id,
+                         pkg->content.setup_tunnel.ok,
+                         pkg->content.setup_tunnel.port);
         break;
     case PKG_CLOSE_TUNNEL:
         pkg_close_tunnel(ret, pkg->content.close_tunnel.tunnel_id);
         break;
-    case PKG_DATA_TUNNEL:
-    {
-        void* data = malloc(pkg->content.data_tunnel.size);
-        memcpy(data, pkg->content.data_tunnel.data,
-               pkg->content.data_tunnel.size);
-        pkg_data_tunnel(ret, pkg->content.data_tunnel.tunnel_id,
-                        pkg->content.data_tunnel.local,
-                        data, pkg->content.data_tunnel.size);
-        break;
-    }
     }
 
     return ret;
@@ -629,10 +535,8 @@ void pkg_freecontent(pkg_t* pkg)
         free(pkg->content.create_tunnel.host);
         break;
     case PKG_OLD_SERVICE:
+    case PKG_SETUP_TUNNEL:
     case PKG_CLOSE_TUNNEL:
-        break;
-    case PKG_DATA_TUNNEL:
-        free(pkg->content.data_tunnel.data);
         break;
     }
 }

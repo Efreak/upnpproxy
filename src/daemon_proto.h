@@ -30,8 +30,23 @@ typedef struct
 {
     uint32_t service_id;
     uint32_t tunnel_id;
+    /* Host this tunnel has on its originating daemon. The receiving tunnel
+     * needs this to replace addresses */
     char* host;
+    /* Port the server listens on for a connection. May be 0 which means
+     * the receive server must response with a setup_tunnel. */
+    uint16_t port;
 } pkg_create_tunnel_t;
+
+/* Response to create_tunnel */
+typedef struct
+{
+    uint32_t tunnel_id;
+    bool ok;
+    /* Port the receiving daemon listens to to setup a tunnel.
+     * May be 0 if create_tunnel.port != 0. */
+    uint16_t port;
+} pkg_setup_tunnel_t;
 
 /* Can be sent by either daemon to signal that the tunnel now is closed */
 typedef struct
@@ -39,23 +54,13 @@ typedef struct
     uint32_t tunnel_id;
 } pkg_close_tunnel_t;
 
-/* Can be sent by either daemon to signal data coming from their end */
-typedef struct
-{
-    uint32_t tunnel_id;
-    bool local; /* if true, the tunnel_id is the sending servers,
-                 * if false, the tunnel_id is the reciving servers */
-    uint32_t size;
-    void* data;
-} pkg_data_tunnel_t;
-
 typedef enum
 {
     PKG_NEW_SERVICE,
     PKG_OLD_SERVICE,
     PKG_CREATE_TUNNEL,
+    PKG_SETUP_TUNNEL,
     PKG_CLOSE_TUNNEL,
-    PKG_DATA_TUNNEL,
 } pkg_type_t;
 
 typedef struct
@@ -66,11 +71,11 @@ typedef struct
         pkg_new_service_t new_service;
         pkg_old_service_t old_service;
         pkg_create_tunnel_t create_tunnel;
+        pkg_setup_tunnel_t setup_tunnel;
         pkg_close_tunnel_t close_tunnel;
-        pkg_data_tunnel_t data_tunnel;
     } content;
     size_t tmp1;
-    uint8_t tmp2;
+    bool tmp2;
 } pkg_t;
 
 #include "buf.h"
@@ -79,18 +84,15 @@ typedef struct
 void pkg_new_service(pkg_t* pkg, uint32_t service_id, char* usn, char* location,
                      char* service, char* server, char* opt, char* nls);
 void pkg_old_service(pkg_t* pkg, uint32_t service_id);
-void pkg_create_tunnel(pkg_t* pkg, uint32_t service_id, uint32_t tunnel_id, char* host);
+void pkg_create_tunnel(pkg_t* pkg, uint32_t service_id, uint32_t tunnel_id, char* host, uint16_t port);
+void pkg_setup_tunnel(pkg_t* pkg, uint32_t tunnel_id, bool ok, uint16_t port);
 void pkg_close_tunnel(pkg_t* pkg, uint32_t tunnel_id);
-void pkg_data_tunnel(pkg_t* pkg, uint32_t tunnel_id, bool local, void* data, uint32_t len);
 
 /* Duplicate the given package */
 pkg_t* pkg_dup(const pkg_t* pkg);
 void pkg_free(pkg_t* pkg);
 
 /* If pkg_write returns true, the pointers in pkg is now OK to free.
- * In the special case of data_tunnel, pkg_write may return false even if part
- * of the data was sent as an package, in which case the data ptr of pkg
- * is moved, so store that one somewhere else to be able to free it
  * If pkg_write returns false, the buffer is full */
 bool pkg_write(buf_t buf, pkg_t* pkg);
 /* If pkg_peek returns true, pkg now contains a full package.
