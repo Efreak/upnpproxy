@@ -1851,6 +1851,7 @@ static void daemon_create_tunnel(daemon_t daemon, server_t* server,
     tunnel_t tunnel, *tunnelptr;
     localservice_t key;
     key.id = create_tunnel->service_id;
+    memset(&tunnel, 0, sizeof(tunnel_t));
     tunnel.id = create_tunnel->tunnel_id;
     tunnel.remote = false;
     tunnel.source.local.server = server;
