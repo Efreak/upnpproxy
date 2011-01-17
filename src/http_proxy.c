@@ -164,6 +164,10 @@ http_proxy_t http_proxy_new(const char* sourcehost, const char* targethost,
 {
     http_proxy_t proxy = calloc(1, sizeof(struct _http_proxy_t));
 
+    assert(sourcehost && targethost);
+    assert(*sourcehost || !*targethost);
+    assert(*targethost || !*sourcehost);
+
     proxy->sourcehost = strdup(sourcehost);
     proxy->targethost = strdup(targethost);
     proxy->output = output;
@@ -1159,18 +1163,31 @@ static bool header(http_proxy_t proxy, bool force)
     for (++pos; issp(*pos); ++pos);
     if (proxy->request && strcasecmp(str, "Host") == 0)
     {
-        size_t hostlen = strlen(proxy->targethost);
-        size_t need = (pos - str) + hostlen + 2 + 1;
-        if (!alloc_str(proxy, need))
+        if (strcasecmp(pos, proxy->sourcehost) == 0)
         {
-            goto invalid_header;
+            size_t hostlen = strlen(proxy->targethost);
+            size_t need = (pos - str) + hostlen + 2 + 1;
+            if (!alloc_str(proxy, need))
+            {
+                goto invalid_header;
+            }
+            *tmp = ':';
+            memcpy(pos, proxy->targethost, hostlen);
+            memcpy(pos + hostlen, "\r\n", 3);
+            eat_crlf(&end);
+            replace(proxy, start, str, end);
+            return true;
         }
-        *tmp = ':';
-        memcpy(pos, proxy->targethost, hostlen);
-        memcpy(pos + hostlen, "\r\n", 3);
-        eat_crlf(&end);
-        replace(proxy, start, str, end);
-        return true;
+#ifdef DEBUG
+        else
+        {
+            if (*proxy->sourcehost)
+            {
+                fprintf(stderr, "http_proxy: warning missmatched host: `%s` != `%s`\n",
+                        proxy->sourcehost, pos);
+            }
+        }
+#endif
     }
     else if (proxy->request && proxy->major >= 1 && strcasecmp(str, "TE") == 0)
     {
