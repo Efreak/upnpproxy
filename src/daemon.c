@@ -1723,7 +1723,7 @@ static void remoteservice_read_cb(void* userdata, socket_t sock)
     port = daemon_allocate_tunnel_port(remote->source->daemon, tunnelptr,
                                        remote->source);
 
-    tunnel.stasis = true;
+    tunnelptr->stasis = true;
     pkg_create_tunnel(&pkg, remote->source_id, tunnelptr->id, remote->host,
                       port);
     daemon_server_write_pkg(remote->source, &pkg, true);
