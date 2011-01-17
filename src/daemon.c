@@ -1864,7 +1864,7 @@ static void daemon_create_tunnel(daemon_t daemon, server_t* server,
         log_printf(daemon->log, LVL_WARN, "Server %s requesting a tunnel for non-existant service %lu",
                    tmp, key.id);
         free(tmp);
-        pkg_setup_tunnel(&pkg, create_tunnel->tunnel_id, 0, false);
+        pkg_setup_tunnel(&pkg, create_tunnel->tunnel_id, false, 0);
         daemon_server_write_pkg(server, &pkg, true);
         return;
     }
@@ -1880,7 +1880,7 @@ static void daemon_create_tunnel(daemon_t daemon, server_t* server,
                     tunnel.source.local.service->hostlen);
         log_printf(daemon->log, LVL_WARN, "Unable to create tunnel to %s", tmp);
         free(tmp);
-        pkg_setup_tunnel(&pkg, create_tunnel->tunnel_id, 0, false);
+        pkg_setup_tunnel(&pkg, create_tunnel->tunnel_id, false, 0);
         daemon_server_write_pkg(server, &pkg, true);
         return;
     }
@@ -1916,7 +1916,7 @@ static void daemon_create_tunnel(daemon_t daemon, server_t* server,
             log_printf(daemon->log, LVL_WARN,
                        "Unable to connect tunnel to %s", tmp);
             free(tmp);
-            pkg_setup_tunnel(&pkg, create_tunnel->tunnel_id, 0, false);
+            pkg_setup_tunnel(&pkg, create_tunnel->tunnel_id, false, 0);
             daemon_server_write_pkg(server, &pkg, true);
             free(host);
             map_remove(server->local_tunnels, tunnelptr);
@@ -1924,7 +1924,7 @@ static void daemon_create_tunnel(daemon_t daemon, server_t* server,
         }
         free(host);
 
-        pkg_setup_tunnel(&pkg, create_tunnel->tunnel_id, 0, true);
+        pkg_setup_tunnel(&pkg, create_tunnel->tunnel_id, true, 0);
         daemon_server_write_pkg(server, &pkg, true);
         tunnelptr->stasis = false;
 
@@ -1939,7 +1939,7 @@ static void daemon_create_tunnel(daemon_t daemon, server_t* server,
         {
             log_printf(daemon->log, LVL_WARN,
                        "None of the servers had a port available");
-            pkg_setup_tunnel(&pkg, create_tunnel->tunnel_id, 0, false);
+            pkg_setup_tunnel(&pkg, create_tunnel->tunnel_id, false, 0);
             daemon_server_write_pkg(server, &pkg, true);
             map_remove(server->local_tunnels, tunnelptr);
             return;
@@ -1949,7 +1949,7 @@ static void daemon_create_tunnel(daemon_t daemon, server_t* server,
         tunnelptr->daemon_conn.sock = -1;
         tunnelptr->stasis = true;
 
-        pkg_setup_tunnel(&pkg, create_tunnel->tunnel_id, port, true);
+        pkg_setup_tunnel(&pkg, create_tunnel->tunnel_id, true, port);
         daemon_server_write_pkg(server, &pkg, true);
     }
 }
