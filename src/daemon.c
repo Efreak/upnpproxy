@@ -128,7 +128,11 @@ typedef struct _tunnel_t
             char* remote_host;
             char* local_host;
         } local;
-        remoteservice_t* remote;
+        struct
+        {
+            remoteservice_t* service;
+            bool listening;
+        } remote;
     } source;
 } tunnel_t;
 
@@ -1290,12 +1294,12 @@ static void daemon_lost_tunnel(tunnel_t* tunnel)
     daemon_t daemon;
     if (tunnel->remote)
     {
-        daemon = tunnel->source.remote->source->daemon;
+        daemon = tunnel->source.remote.service->source->daemon;
         if (tunnel->daemon_conn.state >= CONN_DEAD)
         {
             pkg_t pkg;
             pkg_close_tunnel(&pkg, tunnel->id);
-            daemon_server_write_pkg(tunnel->source.remote->source, &pkg, true);
+            daemon_server_write_pkg(tunnel->source.remote.service->source, &pkg, true);
         }
     }
     else
@@ -1319,7 +1323,7 @@ static void daemon_lost_tunnel(tunnel_t* tunnel)
 
     if (tunnel->remote)
     {
-        map_remove(tunnel->source.remote->source->remote_tunnels, tunnel);
+        map_remove(tunnel->source.remote.service->source->remote_tunnels, tunnel);
     }
     else
     {
@@ -1368,7 +1372,7 @@ static void tunnel_free(tunnel_t* tunnel)
     daemon_t daemon;
     if (tunnel->remote)
     {
-        daemon = tunnel->source.remote->source->daemon;
+        daemon = tunnel->source.remote.service->source->daemon;
     }
     else
     {
@@ -1536,7 +1540,7 @@ static void daemon_tunnel_flush(tunnel_t* tunnel)
 
     if (tunnel->remote)
     {
-        daemon = tunnel->source.remote->source->daemon;
+        daemon = tunnel->source.remote.service->source->daemon;
     }
     else
     {
@@ -1612,7 +1616,7 @@ static void tunnel_read_cb(void* userdata, socket_t sock)
 
     if (tunnel->remote)
     {
-        daemon = tunnel->source.remote->source->daemon;
+        daemon = tunnel->source.remote.service->source->daemon;
     }
     else
     {
@@ -1699,7 +1703,7 @@ static void remoteservice_read_cb(void* userdata, socket_t sock)
     socket_setblocking(tunnel.local_conn.sock, false);
     tunnel.local_conn.state = CONN_CONNECTED;
     tunnel.remote = true;
-    tunnel.source.remote = remote;
+    tunnel.source.remote.service = remote;
     tunnel.local_conn.buf = buf_new(TUNNEL_BUFFER_LOCAL);
     tunnel.daemon_conn.state = CONN_DEAD;
     tunnel.daemon_conn.sock = -1;
@@ -1724,6 +1728,7 @@ static void remoteservice_read_cb(void* userdata, socket_t sock)
                                        remote->source);
 
     tunnelptr->stasis = true;
+    tunnelptr->source.remote.listening = (port > 0);
     pkg_create_tunnel(&pkg, remote->source_id, tunnelptr->id, remote->host,
                       port);
     daemon_server_write_pkg(remote->source, &pkg, true);
@@ -2199,7 +2204,8 @@ static void daemon_setup_tunnel(daemon_t daemon, server_t* server,
         map_remove(server->remote_tunnels, tunnel);
         return;
     }
-    if (tunnel->daemon_conn.state == CONN_DEAD)
+    if (tunnel->daemon_conn.state == CONN_DEAD &&
+        !tunnel->source.remote.listening)
     {
         struct sockaddr* host;
         if (setup_tunnel->port == 0)
