@@ -18,6 +18,10 @@ void selector_add(selector_t selector, socket_t sock,
 /* This function does not check if you set a write_callback back when calling
  * add. If you set check_write to true and then have write_callback == NULL
  * you just caused a segfault. */
+void selector_chk(selector_t selector, socket_t sock,
+                  bool check_read, bool check_write);
+void selector_chkread(selector_t selector, socket_t sock,
+                      bool check_read);
 void selector_chkwrite(selector_t selector, socket_t sock,
                        bool check_write);
 

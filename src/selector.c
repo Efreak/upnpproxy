@@ -93,6 +93,26 @@ void selector_add(selector_t selector, socket_t sock,
     c->userdata = userdata;
 }
 
+void selector_chk(selector_t selector, socket_t sock,
+                  bool check_read, bool check_write)
+{
+    selector_chkread(selector, sock, check_read);
+    selector_chkwrite(selector, sock, check_write);
+}
+
+void selector_chkread(selector_t selector, socket_t sock,
+                       bool check_read)
+{
+    if (check_read)
+    {
+        FD_SET(sock, &selector->read_set);
+    }
+    else
+    {
+        FD_CLR(sock, &selector->read_set);
+    }
+}
+
 void selector_chkwrite(selector_t selector, socket_t sock,
                        bool check_write)
 {
