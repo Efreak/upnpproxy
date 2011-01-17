@@ -2,7 +2,7 @@ MAINTAINERCLEANFILES = Makefile.in
 
 INCLUDES = -I$(top_srcdir)/src -I$(top_srcdir) @DEFINES@
 
-TESTS = test-getline test-buf test-proto
+TESTS = test-getline test-buf test-proto test-proxy
 
 check_PROGRAMS = $(TESTS)
 
@@ -11,3 +11,5 @@ test_getline_SOURCES = test_getline.c $(top_srcdir)/src/rpl_getline.h $(top_srcd
 test_buf_SOURCES = test_buf.c $(top_srcdir)/src/buf.h $(top_srcdir)/src/buf.c $(top_srcdir)/src/common.h $(top_srcdir)/src/compat.h $(top_srcdir)/src/compat.c
 
 test_proto_SOURCES = test_proto.c $(top_srcdir)/src/daemon_proto.h $(top_srcdir)/src/daemon_proto.c $(top_srcdir)/src/buf.h $(top_srcdir)/src/buf.c $(top_srcdir)/src/common.h $(top_srcdir)/src/compat.h $(top_srcdir)/src/compat.c
+
+test_proxy_SOURCES = test_proxy.c $(top_srcdir)/src/http_proxy.h $(top_srcdir)/src/http_proxy.c $(top_srcdir)/src/buf.h $(top_srcdir)/src/buf.c $(top_srcdir)/src/common.h $(top_srcdir)/src/compat.h $(top_srcdir)/src/compat.c

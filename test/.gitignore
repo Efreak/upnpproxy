@@ -4,4 +4,6 @@ test-getline
 test-getline.log
 test-proto
 test-proto.log
+test-proxy
+test-proxy.log
 test-suite.log
