@@ -289,10 +289,7 @@ bool selector_tick(selector_t selector, unsigned long timeout_ms)
             selector->clients--;
             memmove(c, c + 1, (selector->clients - (i - 1)) * sizeof(client_t));
         }
-        else
-        {
-            --c;
-        }
+        --c;
         --i;
     }
 
