@@ -17,6 +17,8 @@ static bool test_http11_chunked(void);
 static bool test_http11_te(void);
 static bool test_req(void);
 static bool test_req2(void);
+static bool test_req3(void);
+static bool test_req4(void);
 
 int main(int argc, char** argv)
 {
@@ -31,6 +33,8 @@ int main(int argc, char** argv)
     RUN_TEST(test_http11_te());
     RUN_TEST(test_req());
     RUN_TEST(test_req2());
+    RUN_TEST(test_req3());
+    RUN_TEST(test_req4());
     return cnt == tot ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
@@ -651,6 +655,92 @@ static bool test_req2(void)
     if (strcmp(request, req) != 0)
     {
         expected("req", request, req);
+        free(req);
+        return false;
+    }
+
+    free(req);
+    return true;
+}
+
+static bool test_req3(void)
+{
+    const char* request =
+        "GET /5d4799e5-7d24-4bd6-ab2c-76298425d598/ HTTP/1.1\r\n"
+        "User-Agent: Opera/9.80 (Windows NT 6.1; U; en) Presto/2.7.62 Version/11.00\r\n"
+        "Host: 10.0.1.1:48383\r\n"
+        "Accept: text/html, application/xml;q=0.9, application/xhtml+xml, image/png, image/jpeg, image/gif, image/x-xbitmap, */*;q=0.1\r\n"
+        "Accept-Language: sv-SE,sv;q=0.9,en;q=0.8\r\n"
+        "Accept-Charset: iso-8859-1, utf-8, utf-16, *;q=0.1\r\n"
+        "Accept-Encoding: deflate, gzip, x-gzip, identity, *;q=0\r\n"
+        "Connection: Keep-Alive, TE\r\n"
+        "TE: deflate, gzip, chunked, identity, trailers\r\n"
+        "\r\n";
+    const char* request_conv =
+        "GET /5d4799e5-7d24-4bd6-ab2c-76298425d598/ HTTP/1.1\r\n"
+        "User-Agent: Opera/9.80 (Windows NT 6.1; U; en) Presto/2.7.62 Version/11.00\r\n"
+        "Host: 192.168.1.7:45000\r\n"
+        "Accept: text/html, application/xml;q=0.9, application/xhtml+xml, image/png, image/jpeg, image/gif, image/x-xbitmap, */*;q=0.1\r\n"
+        "Accept-Language: sv-SE,sv;q=0.9,en;q=0.8\r\n"
+        "Accept-Charset: iso-8859-1, utf-8, utf-16, *;q=0.1\r\n"
+        "Accept-Encoding: deflate, gzip, x-gzip, identity, *;q=0\r\n"
+        "Connection: Keep-Alive, TE\r\n"
+        "TE: deflate, gzip, chunked, identity\r\n"
+        "\r\n";
+    char* req = NULL;
+
+    if (!test2("req", "10.0.1.1:48383", "192.168.1.7:45000", request, &req))
+    {
+        free(req);
+        return false;
+    }
+
+    if (strcmp(request_conv, req) != 0)
+    {
+        expected("req", request_conv, req);
+        free(req);
+        return false;
+    }
+
+    free(req);
+    return true;
+}
+
+static bool test_req4(void)
+{
+    const char* request =
+        "GET /5d4799e5-7d24-4bd6-ab2c-76298425d598/ HTTP/1.1\r\n"
+        "User-Agent: Opera/9.80 (Windows NT 6.1; U; en) Presto/2.7.62 Version/11.00\r\n"
+        "Host: 10.0.1.1:48383\r\n"
+        "Accept: text/html, application/xml;q=0.9, application/xhtml+xml, image/png, image/jpeg, image/gif, image/x-xbitmap, */*;q=0.1\r\n"
+        "Accept-Language: sv-SE,sv;q=0.9,en;q=0.8\r\n"
+        "Accept-Charset: iso-8859-1, utf-8, utf-16, *;q=0.1\r\n"
+        "Accept-Encoding: deflate, gzip, x-gzip, identity, *;q=0\r\n"
+        "Connection: Keep-Alive, TE\r\n"
+        "TE: deflate, gzip, trailers, chunked, identity\r\n"
+        "\r\n";
+    const char* request_conv =
+        "GET /5d4799e5-7d24-4bd6-ab2c-76298425d598/ HTTP/1.1\r\n"
+        "User-Agent: Opera/9.80 (Windows NT 6.1; U; en) Presto/2.7.62 Version/11.00\r\n"
+        "Host: 192.168.1.7:45000\r\n"
+        "Accept: text/html, application/xml;q=0.9, application/xhtml+xml, image/png, image/jpeg, image/gif, image/x-xbitmap, */*;q=0.1\r\n"
+        "Accept-Language: sv-SE,sv;q=0.9,en;q=0.8\r\n"
+        "Accept-Charset: iso-8859-1, utf-8, utf-16, *;q=0.1\r\n"
+        "Accept-Encoding: deflate, gzip, x-gzip, identity, *;q=0\r\n"
+        "Connection: Keep-Alive, TE\r\n"
+        "TE: deflate, gzip, chunked, identity\r\n"
+        "\r\n";
+    char* req = NULL;
+
+    if (!test2("req", "10.0.1.1:48383", "192.168.1.7:45000", request, &req))
+    {
+        free(req);
+        return false;
+    }
+
+    if (strcmp(request_conv, req) != 0)
+    {
+        expected("req", request_conv, req);
         free(req);
         return false;
     }

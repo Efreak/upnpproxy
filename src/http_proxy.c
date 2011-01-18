@@ -33,6 +33,7 @@ struct _http_proxy_t
     buf_t input;
     buf_t output;
 
+    size_t last_pos;
     iter_t last;
     char* tmpstr;
     size_t tmplen;
@@ -1057,6 +1058,7 @@ static bool header_value_list_contains(char* str, const char* token)
         if (*pos == ',')
         {
             /* null element */
+            ++pos;
             continue;
         }
         start = pos;
@@ -1078,12 +1080,26 @@ static bool header_value_list_contains(char* str, const char* token)
                 return false;
             }
         }
+        for (; issp(*pos); ++pos);
+        if (*pos == '\0')
+        {
+            return false;
+        }
+        else if (*pos == ',')
+        {
+            ++pos;
+        }
+        else
+        {
+            /* expected end of string or , */
+            return false;
+        }
     }
 }
 
 static void header_value_list_remove(char* str, const char* token)
 {
-    char* pos = str, *start, *end;
+    char* pos = str, *start, *end, *startpos;
     size_t tokenlen = strlen(token);
     for (;;)
     {
@@ -1095,6 +1111,7 @@ static void header_value_list_remove(char* str, const char* token)
         if (*pos == ',')
         {
             /* null element */
+            ++pos;
             continue;
         }
         start = pos;
@@ -1112,10 +1129,32 @@ static void header_value_list_remove(char* str, const char* token)
                 return;
             }
         }
+        for (; issp(*pos); ++pos);
+        if (*pos == ',')
+        {
+            ++pos;
+            for (; issp(*pos); ++pos);
+            startpos = start;
+        }
+        else
+        {
+            char* tmp = start;
+            assert(*pos == '\0');
+            for (; tmp > str && issp(tmp[-1]); --tmp);
+            if (tmp > str && tmp[-1] == ',')
+            {
+                startpos = tmp - 1;
+                for (; startpos > str && issp(startpos[-1]); --startpos);
+            }
+            else
+            {
+                startpos = start;
+            }
+        }
         if (tokenlen == (end - start) &&
             strncasecmp(token, start, tokenlen) == 0)
         {
-            memmove(start, pos, strlen(pos) + 1);
+            memmove(startpos, pos, strlen(pos) + 1);
             return;
         }
     }
@@ -1547,6 +1586,11 @@ bool proxy_flush(http_proxy_t proxy, bool force)
     {
         return false;
     }
+    if (!proxy->active_transfer && !proxy->active_replace)
+    {
+        iter_begin(proxy, &proxy->last);
+        iter_move(&proxy->last, proxy->last_pos);
+    }
     for (;;)
     {
         state_t last = proxy->state;
@@ -1556,7 +1600,7 @@ bool proxy_flush(http_proxy_t proxy, bool force)
             any |= buf_wavail(proxy->output);
             if (!transfer_flush(proxy))
             {
-                return any;
+                break;
             }
             assert(!proxy->active_transfer);
         }
@@ -1566,7 +1610,7 @@ bool proxy_flush(http_proxy_t proxy, bool force)
             any |= buf_wavail(proxy->output);
             if (!replace_flush(proxy))
             {
-                return any;
+                break;
             }
             assert(!proxy->active_replace);
         }
@@ -1591,8 +1635,13 @@ bool proxy_flush(http_proxy_t proxy, bool force)
         }
         if (!ret && proxy->state == last)
         {
-            return any;
+            break;
         }
         any |= ret;
     }
+    if (!proxy->active_transfer && !proxy->active_replace)
+    {
+        proxy->last_pos = proxy->last.pos - proxy->last.ptr;
+    }
+    return any;
 }
