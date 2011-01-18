@@ -2988,10 +2988,6 @@ static int _daemon_server_flush_output(server_t* server)
     size_t avail;
     const char* ptr;
     ssize_t got;
-    if (server->state == CONN_DEAD)
-    {
-        return -1;
-    }
     for (;;)
     {
         ptr = buf_rptr(server->out, &avail);
