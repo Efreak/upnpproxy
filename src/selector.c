@@ -56,41 +56,40 @@ void selector_add(selector_t selector, socket_t sock,
                   write_callback_t write_callback)
 {
     client_t* c;
+    size_t i;
     assert(read_callback != NULL || write_callback != NULL);
 
-#ifdef DEBUG
+    for (i = 0, c = selector->client; i < selector->clients; ++i, ++c)
     {
-        size_t i;
-        for (i = 0, c = selector->client; i < selector->clients; ++i, ++c)
+        if (c->sock == sock)
         {
-            if (c->sock == sock)
-            {
-                assert(false);
-                break;
-            }
+            assert(c->delete);
+            --(selector->delete_cnt);
+            break;
         }
     }
-#endif
-
-    if (selector->clients == selector->clients_alloc)
+    if (i == selector->clients)
     {
-        size_t na = selector->clients_alloc * 2;
-        if (na < 4)
-            na = 4;
-        c = realloc(selector->client, na * sizeof(client_t));
-        if (c == NULL)
+        if (selector->clients == selector->clients_alloc)
         {
-            na = selector->clients_alloc + 10;
+            size_t na = selector->clients_alloc * 2;
+            if (na < 4)
+                na = 4;
             c = realloc(selector->client, na * sizeof(client_t));
             if (c == NULL)
             {
-                return;
+                na = selector->clients_alloc + 10;
+                c = realloc(selector->client, na * sizeof(client_t));
+                if (c == NULL)
+                {
+                    return;
+                }
             }
+            selector->client = c;
+            selector->clients_alloc = na;
         }
-        selector->client = c;
-        selector->clients_alloc = na;
+        c = selector->client + selector->clients++;
     }
-    c = selector->client + selector->clients++;
     memset(c, 0, sizeof(client_t));
     c->read_callback = read_callback;
     c->write_callback = write_callback;
@@ -296,6 +295,13 @@ bool selector_tick(selector_t selector, unsigned long timeout_ms)
         }
         --i;
     }
+
+#ifdef DEBUG
+    for (i = 0, c = selector->client; i < selector->clients; ++i, ++c)
+    {
+        assert(!c->delete);
+    }
+#endif
 
     return true;
 }
