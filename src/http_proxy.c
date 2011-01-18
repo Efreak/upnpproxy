@@ -64,99 +64,8 @@ struct _http_proxy_t
                   * connection close */
 };
 
-/* HTTP/1.0
-    Full-Request   = Request-Line             ; Section 5.1
-                     *( General-Header        ; Section 4.3
-                      | Request-Header        ; Section 5.2
-                      | Entity-Header )       ; Section 7.1
-                      CRLF
-                     [ Entity-Body ]          ; Section 7.2
-
-    Request-Line = Method SP Request-URI SP HTTP-Version CRLF
- If request has body, Content-Length must be available
-
-    Full-Response  = Status-Line              ; Section 6.1
-                     *( General-Header        ; Section 4.3
-                      | Response-Header       ; Section 6.2
-                      | Entity-Header )       ; Section 7.1
-                      CRLF
-                     [ Entity-Body ]          ; Section 7.2
-
-    Status-Line = HTTP-Version SP Status-Code SP Reason-Phrase CRLF
-
-    Simple-Request  = "GET" SP Request-URI CRLF
-
-    Simple-Response = [ Entity-Body ]
-
-  HTTP/1.1
-
-  transfer-coding         = "chunked" | transfer-extension
-       transfer-extension      = token *( ";" parameter )
-
-   Parameters are in  the form of attribute/value pairs.
-
-       parameter               = attribute "=" value
-       attribute               = token
-       value                   = token | quoted-string
-
- Chunked-Body   = *chunk
-                        last-chunk
-                        trailer
-                        CRLF
-
-       chunk          = chunk-size [ chunk-extension ] CRLF
-                        chunk-data CRLF
-       chunk-size     = 1*HEX
-       last-chunk     = 1*("0") [ chunk-extension ] CRLF
-
-       chunk-extension= *( ";" chunk-ext-name [ "=" chunk-ext-val ] )
-       chunk-ext-name = token
-       chunk-ext-val  = token | quoted-string
-       chunk-data     = chunk-size(OCTET)
-       trailer        = *(entity-header CRLF)
-
-
-
- 1.Any response message which "MUST NOT" include a message-body (such
-     as the 1xx, 204, and 304 responses and any response to a HEAD
-     request) is always terminated by the first empty line after the
-     header fields, regardless of the entity-header fields present in
-     the message.
-
- 2.If a Transfer-Encoding header field (section 14.41) is present and
-     has any value other than "identity", then the transfer-length is
-     defined by use of the "chunked" transfer-coding (section 3.6),
-     unless the message is terminated by closing the connection.
-
- 3.If a Content-Length header field (section 14.13) is present, its
-     decimal value in OCTETs represents both the entity-length and the
-     transfer-length. The Content-Length header field MUST NOT be sent
-     if these two lengths are different (i.e., if a Transfer-Encoding
-     header field is present). If a message is received with both a
-     Transfer-Encoding header field and a Content-Length header field,
-     the latter MUST be ignored.
-
-If either the client or the server sends the close token in the
-   Connection header, that request becomes the last one for the
-   connection.
-
-       Connection = "Connection" ":" 1#(connection-token)
-       connection-token  = token
-
-  Host = "Host" ":" host [ ":" port ]
-
-  Remove trailers
-  TE        = "TE" ":" #( t-codings )
-  t-codings = "trailers" | ( transfer-extension [ accept-params ] )
-
-Range header with ultiple byte-
-     range specifiers from a 1.1 client implies that the lient can parse
-     multipart/byteranges responses.
-
- Transfer-Encoding       = "Transfer-Encoding" ":" 1#transfer-coding
-
-
-*/
+static const size_t DEFAULT_BUFFER_SIZE = 1024;
+static const size_t MAX_BUFFER_SIZE = 65535;
 
 static bool proxy_flush(http_proxy_t proxy, bool force);
 
@@ -173,7 +82,7 @@ http_proxy_t http_proxy_new(const char* sourcehost, const char* targethost,
     proxy->targethost = strdup(targethost);
     proxy->output = output;
 
-    proxy->input = buf_new(1024);
+    proxy->input = buf_new(DEFAULT_BUFFER_SIZE);
 
     return proxy;
 }
@@ -331,49 +240,6 @@ static bool find_newline(iter_t offset, iter_t* iter, bool allow_lws,
             {
                 return true;
             }
-        }
-    }
-    if (allow_quoted && quote_start != NULL)
-    {
-        /* As we can't save "in quoted" state, reset the iterator to the start
-         * of the quoted area */
-        iter->pos = quote_start;
-    }
-    return false;
-}
-
-static bool find_char(iter_t offset, char c, iter_t* iter, bool allow_quoted)
-{
-    const char* quote_start = NULL;
-    iter_copy(iter, offset);
-    for (; iter->pos < iter->end; ++(iter->pos))
-    {
-        if (allow_quoted)
-        {
-            if (quote_start == NULL)
-            {
-                if (*(iter->pos) == '"')
-                {
-                    quote_start = iter->pos;
-                    continue;
-                }
-            }
-            else
-            {
-                if (*(iter->pos) == '\\')
-                {
-                    ++(iter->pos);
-                }
-                else if (*(iter->pos) == '"')
-                {
-                    quote_start = NULL;
-                }
-                continue;
-            }
-        }
-        if (*(iter->pos) == c)
-        {
-            return true;
         }
     }
     if (allow_quoted && quote_start != NULL)
@@ -795,6 +661,39 @@ static void reset_state(http_proxy_t proxy)
     proxy->in_chunk = false;
 }
 
+/* This might destroy all iterators except proxy->last */
+static bool need_input(http_proxy_t proxy)
+{
+    assert(!proxy->active_transfer);
+    assert(!proxy->active_replace);
+    proxy->last_pos = proxy->last.pos - proxy->last.ptr;
+    if (buf_rrotate(proxy->input))
+    {
+        iter_begin(proxy, &(proxy->last));
+        iter_move(&(proxy->last), proxy->last_pos);
+        assert(buf_ravail(proxy->input) == proxy->last.end - proxy->last.ptr);
+        return true;
+    }
+    else
+    {
+        size_t s = buf_size(proxy->input);
+        if (s < MAX_BUFFER_SIZE)
+        {
+            s = s * 2;
+            if (s > MAX_BUFFER_SIZE)
+            {
+                s = MAX_BUFFER_SIZE;
+            }
+            proxy->input = buf_resize(proxy->input, s);
+            iter_begin(proxy, &(proxy->last));
+            iter_move(&(proxy->last), proxy->last_pos);
+        }
+        /* Still returning false as we did not actully make any new data
+         * available, just made more space for it */
+        return false;
+    }
+}
+
 static bool dawn(http_proxy_t proxy, bool force)
 {
     iter_t end, start, pos;
@@ -803,17 +702,25 @@ static bool dawn(http_proxy_t proxy, bool force)
     /* Status-Line = HTTP-Version SP Status-Code SP Reason-Phrase CRLF */
     /* Simple-Request = "GET" SP Request-URI CRLF */
     /* Simple-Response = [ Entity-Body ] */
-    if (!find_newline(proxy->last, &proxy->last, false, false))
+    for (;;)
     {
-        if (force)
+        if (!find_newline(proxy->last, &proxy->last, false, false))
         {
-            if (proxy->last.end == proxy->last.ptr)
+            if (need_input(proxy))
             {
-                return false;
+                continue;
             }
-            goto simple_response;
+            if (force)
+            {
+                if (proxy->last.end == proxy->last.ptr)
+                {
+                    return false;
+                }
+                goto simple_response;
+            }
+            return false;
         }
-        return false;
+        break;
     }
     iter_copy(&end, proxy->last);
     if (iter_pos(end) > 0 && iter_get(end, -1) == '\r')
@@ -1164,13 +1071,21 @@ static bool header(http_proxy_t proxy, bool force)
 {
     iter_t start, end;
     char* str, *pos, *tmp;
-    if (!find_newline(proxy->last, &proxy->last, true, true))
+    for (;;)
     {
-        if (force)
+        if (!find_newline(proxy->last, &proxy->last, true, true))
         {
-            goto invalid_header;
+            if (need_input(proxy))
+            {
+                continue;
+            }
+            if (force)
+            {
+                goto invalid_header;
+            }
+            return false;
         }
-        return false;
+        break;
     }
     iter_copy(&end, proxy->last);
     if (iter_pos(end) > 0 && iter_get(end, -1) == '\r')
@@ -1380,9 +1295,17 @@ static bool chunked_body(http_proxy_t proxy)
     {
         iter_t start, end;
         char* str, *pos, *size_end;
-        if (!find_newline(proxy->last, &proxy->last, true, true))
+        for (;;)
         {
-            return false;
+            if (!find_newline(proxy->last, &proxy->last, true, true))
+            {
+                if (need_input(proxy))
+                {
+                    continue;
+                }
+                return false;
+            }
+            break;
         }
         iter_copy(&end, proxy->last);
         if (iter_pos(end) > 0 && iter_get(end, -1) == '\r')
@@ -1419,10 +1342,18 @@ static bool chunked_body(http_proxy_t proxy)
              * so no trailer possible */
             eat_crlf(&end);
             iter_copy(&start, end);
-            if (!find_newline(start, &end, false, false))
+            for (;;)
             {
-                /* Better luck next time */
-                return false;
+                if (!find_newline(start, &end, false, false))
+                {
+                    if (need_input(proxy))
+                    {
+                        continue;
+                    }
+                    /* Better luck next time */
+                    return false;
+                }
+                break;
             }
             if (iter_pos(end) > 0 && iter_get(end, -1) == '\r')
             {
@@ -1483,9 +1414,17 @@ static bool chunked_body(http_proxy_t proxy)
 
         {
             iter_t end;
-            if (!find_newline(proxy->last, &proxy->last, false, false))
+            for (;;)
             {
-                return false;
+                if (!find_newline(proxy->last, &proxy->last, false, false))
+                {
+                    if (need_input(proxy))
+                    {
+                        continue;
+                    }
+                    return false;
+                }
+                break;
             }
             iter_copy(&end, proxy->last);
             if (iter_pos(end) > 0 && iter_get(end, -1) == '\r')
