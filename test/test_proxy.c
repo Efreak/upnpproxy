@@ -19,6 +19,7 @@ static bool test_req(void);
 static bool test_req2(void);
 static bool test_req3(void);
 static bool test_req4(void);
+static bool test_req5(void);
 
 int main(int argc, char** argv)
 {
@@ -35,6 +36,7 @@ int main(int argc, char** argv)
     RUN_TEST(test_req2());
     RUN_TEST(test_req3());
     RUN_TEST(test_req4());
+    RUN_TEST(test_req5());
 
     fprintf(stdout, "OK %u/%u\n", cnt, tot);
 
@@ -649,7 +651,7 @@ static bool test_req2(void)
 
     char* req = NULL;
 
-    if (!test2("req", "", "", request, &req))
+    if (!test2("req2", "", "", request, &req))
     {
         free(req);
         return false;
@@ -657,7 +659,7 @@ static bool test_req2(void)
 
     if (strcmp(request, req) != 0)
     {
-        expected("req", request, req);
+        expected("req2", request, req);
         free(req);
         return false;
     }
@@ -692,7 +694,7 @@ static bool test_req3(void)
         "\r\n";
     char* req = NULL;
 
-    if (!test2("req", "10.0.1.1:48383", "192.168.1.7:45000", request, &req))
+    if (!test2("req3", "10.0.1.1:48383", "192.168.1.7:45000", request, &req))
     {
         free(req);
         return false;
@@ -700,7 +702,7 @@ static bool test_req3(void)
 
     if (strcmp(request_conv, req) != 0)
     {
-        expected("req", request_conv, req);
+        expected("req3", request_conv, req);
         free(req);
         return false;
     }
@@ -735,7 +737,7 @@ static bool test_req4(void)
         "\r\n";
     char* req = NULL;
 
-    if (!test2("req", "10.0.1.1:48383", "192.168.1.7:45000", request, &req))
+    if (!test2("req4", "10.0.1.1:48383", "192.168.1.7:45000", request, &req))
     {
         free(req);
         return false;
@@ -743,7 +745,40 @@ static bool test_req4(void)
 
     if (strcmp(request_conv, req) != 0)
     {
-        expected("req", request_conv, req);
+        expected("req4", request_conv, req);
+        free(req);
+        return false;
+    }
+
+    free(req);
+    return true;
+}
+
+static bool test_req5(void)
+{
+    const char* source = "192.168.1.7:44087";
+    const char* target = "10.0.1.1:35000";
+    const char* request = "GET /source/index.html HTTP/1.1\r\n"
+        "User-Agent: CERN-LineMode/2.15 libwww/2.17b3\r\n"
+        "Host: 192.168.1.7\r\n"
+        "Connection: closed\r\n"
+        "\r\n";
+    const char* request_conv = "GET /source/index.html HTTP/1.1\r\n"
+        "User-Agent: CERN-LineMode/2.15 libwww/2.17b3\r\n"
+        "Host: 10.0.1.1\r\n"
+        "Connection: closed\r\n"
+        "\r\n";
+    char* req = NULL;
+
+    if (!test2("req5", source, target, request, &req))
+    {
+        free(req);
+        return false;
+    }
+
+    if (strcmp(request_conv, req) != 0)
+    {
+        expected("req5", request_conv, req);
         free(req);
         return false;
     }

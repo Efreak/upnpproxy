@@ -1202,10 +1202,39 @@ static bool header(http_proxy_t proxy, bool force)
     for (++pos; issp(*pos); ++pos);
     if (proxy->request && strcasecmp(str, "Host") == 0)
     {
+        bool do_replace = false, skip_port = false;
         if (strcasecmp(pos, proxy->sourcehost) == 0)
         {
+            do_replace = true;
+        }
+        else
+        {
+            const char* p1 = strchr(pos, ':');
+            const char* p2 = strchr(proxy->sourcehost, ':');
+            if (p1 == NULL && p2 != NULL)
+            {
+                if (strlen(pos) == (p2 - proxy->sourcehost) &&
+                    memcmp(pos, proxy->sourcehost, p2 - proxy->sourcehost) == 0)
+                {
+                    skip_port = true;
+                    do_replace = true;
+                }
+            }
+        }
+
+        if (do_replace)
+        {
             size_t hostlen = strlen(proxy->targethost);
-            size_t need = (pos - str) + hostlen + 2 + 1;
+            size_t need;
+            if (skip_port)
+            {
+                const char* p = strchr(proxy->targethost, ':');
+                if (p != NULL)
+                {
+                    hostlen = p - proxy->targethost;
+                }
+            }
+            need = (pos - str) + hostlen + 2 + 1;
             if (!alloc_str(proxy, need))
             {
                 goto invalid_header;
