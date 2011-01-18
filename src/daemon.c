@@ -1464,7 +1464,7 @@ static bool flush_conn(daemon_t daemon, tunnel_t* tunnel,
             }
             if (proxy != NULL)
             {
-                http_proxy_flush(proxy);
+                http_proxy_flush(proxy, true);
             }
             close_conn(daemon, in_conn);
             return true;
@@ -1492,6 +1492,10 @@ static bool flush_conn(daemon_t daemon, tunnel_t* tunnel,
         const void* ptr = buf_rptr(in_conn->buf, &avail);
         if (avail == 0)
         {
+            if (proxy != NULL)
+            {
+                http_proxy_flush(proxy, false);
+            }
             break;
         }
         ret = socket_write(in_conn->sock, ptr, avail);
@@ -1525,7 +1529,15 @@ static bool flush_conn(daemon_t daemon, tunnel_t* tunnel,
         }
         if (buf_rmove(in_conn->buf, ret) == 0)
         {
+            if (proxy != NULL)
+            {
+                http_proxy_flush(proxy, false);
+            }
             break;
+        }
+        if (proxy != NULL)
+        {
+            http_proxy_flush(proxy, false);
         }
     }
 
