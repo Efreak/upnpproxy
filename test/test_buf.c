@@ -11,6 +11,7 @@
 static bool test1(size_t size, size_t step);
 static bool test2(size_t size, size_t step);
 static bool test3(void);
+static bool test4(void);
 
 int main(int argc, char** argv)
 {
@@ -27,6 +28,8 @@ int main(int argc, char** argv)
     RUN_TEST(test2(99, 6));
 
     RUN_TEST(test3());
+
+    RUN_TEST(test4());
 
     fprintf(stdout, "OK %u/%u\n", cnt, tot);
 
@@ -332,5 +335,148 @@ static bool test3(void)
     }
     buf_free(buf);
     free(tmp);
+    return true;
+}
+
+static bool test4(void)
+{
+    buf_t buf = buf_new(20);
+    char tmp1[20], tmp2[20];
+    const char *ptr;
+    size_t ret, i;
+    for (i = 0; i < sizeof(tmp1); ++i)
+    {
+        tmp1[i] = 'A' + i;
+    }
+    if (buf_rrotate(buf))
+    {
+        fprintf(stderr, "test4: buf_rrotate returned false on empty buffer\n");
+        buf_free(buf);
+        return false;
+    }
+    ret = buf_write(buf, tmp1, 15);
+    if (ret != 15)
+    {
+        fprintf(stderr, "test4: buf_write(15) failed: %lu\n", ret);
+        buf_free(buf);
+        return false;
+    }
+    if (buf_rrotate(buf))
+    {
+        fprintf(stderr, "test4: buf_rrotate returned false on already fixed buffer\n");
+        buf_free(buf);
+        return false;
+    }
+    ret = buf_read(buf, tmp2, 5);
+    if (ret != 5)
+    {
+        fprintf(stderr, "test4: buf_read(5) failed: %lu\n", ret);
+        buf_free(buf);
+        return false;
+    }
+    ret = buf_ravail(buf);
+    if (ret != 10)
+    {
+        fprintf(stderr, "test4: buf_ravail failed: %lu\n", ret);
+        buf_free(buf);
+        return false;
+    }
+    if (!buf_rrotate(buf))
+    {
+        fprintf(stderr, "test4: buf_rrotate returned true on buffer with 5 byte whole\n");
+        buf_free(buf);
+        return false;
+    }
+    ret = buf_ravail(buf);
+    if (ret != 10)
+    {
+        fprintf(stderr, "test4: buf_ravail after buf_rrotate failed: %lu\n", ret);
+        buf_free(buf);
+        return false;
+    }
+    buf_rptr(buf, &ret);
+    if (ret != 10)
+    {
+        fprintf(stderr, "test4: buf_rptr after buf_rrotate failed: %lu\n", ret);
+        buf_free(buf);
+        return false;
+    }
+    buf_wptr(buf, &ret);
+    if (ret != 10)
+    {
+        fprintf(stderr, "test4: buf_wptr after buf_rrotate failed: %lu\n", ret);
+        buf_free(buf);
+        return false;
+    }
+    ret = buf_read(buf, tmp2, 10);
+    if (ret != 10)
+    {
+        fprintf(stderr, "test4: buf_read after buf_rrotate failed: %lu\n", ret);
+        buf_free(buf);
+        return false;
+    }
+    if (memcmp(tmp2, tmp1 + 5, 10) != 0)
+    {
+        tmp2[10] = '\0';
+        fprintf(stderr, "test4: got wrong data after buf_rrotate: `%s`\n", tmp2);
+        buf_free(buf);
+        return false;
+    }
+    assert(buf_ravail(buf) == 0);
+    ret = buf_write(buf, tmp1, 20);
+    assert(ret == 20);
+    ret = buf_read(buf, tmp2, 12);
+    assert(ret == 12);
+    ret = buf_write(buf, tmp1, 7);
+    assert(ret == 7);
+    ret = buf_ravail(buf);
+    if (ret != 15)
+    {
+        fprintf(stderr, "test4: second writes failed, ravail: %lu\n", ret);
+        buf_free(buf);
+        return false;
+    }
+    buf_rptr(buf, &ret);
+    if (ret != 8)
+    {
+        fprintf(stderr, "test4: second writes failed, rptr(avail): %lu\n", ret);
+        buf_free(buf);
+        return false;
+    }
+    if (!buf_rrotate(buf))
+    {
+        fprintf(stderr, "test4: buf_rrotate after second write returned false\n");
+        buf_free(buf);
+        return false;
+    }
+    ret = buf_ravail(buf);
+    if (ret != 15)
+    {
+        fprintf(stderr, "test4: second write, rrotate, failed, ravail: %lu\n", ret);
+        buf_free(buf);
+        return false;
+    }
+    ptr = buf_rptr(buf, &ret);
+    if (ret != 15)
+    {
+        fprintf(stderr, "test4: second write, rptr, failed, ravail: %lu\n", ret);
+        buf_free(buf);
+        return false;
+    }
+    memcpy(tmp2, ptr, ret);
+    tmp2[15] = '\0';
+    if (memcmp(tmp2, tmp1 + 12, 8) != 0)
+    {
+        fprintf(stderr, "test4: second write, invalid data (first part): `%s`\n", tmp2);
+        buf_free(buf);
+        return false;
+    }
+    if (memcmp(tmp2 + 8, tmp1, 7) != 0)
+    {
+        fprintf(stderr, "test4: second write, invalid data (second part): `%s`\n", tmp2);
+        buf_free(buf);
+        return false;
+    }
+    buf_free(buf);
     return true;
 }

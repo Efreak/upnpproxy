@@ -41,4 +41,8 @@ size_t buf_replace(buf_t buf, const void* data, size_t size);
 buf_t buf_resize(buf_t buf, size_t newsize);
 size_t buf_size(buf_t buf);
 
+/* Move all readable data to the start of the buffer.
+ * Returns false if not needed (ie it was already there). */
+bool buf_rrotate(buf_t buf);
+
 #endif /* BUF_H */

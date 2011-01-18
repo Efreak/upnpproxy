@@ -394,3 +394,63 @@ size_t buf_size(buf_t buf)
 {
     return buf->end - buf->data;
 }
+
+bool buf_rrotate(buf_t buf)
+{
+    if (buf->rptr == buf->data ||
+        (buf->rptr == buf->wptr && !buf->full))
+    {
+        return false;
+    }
+
+    if (buf->rptr < buf->wptr)
+    {
+        size_t size = buf->wptr - buf->rptr;
+        if (buf->rptr >= buf->data + size)
+        {
+            memcpy(buf->data, buf->rptr, size);
+        }
+        else
+        {
+            memmove(buf->data, buf->rptr, size);
+        }
+        buf->rptr = buf->data;
+        buf->wptr = buf->data + size;
+        return true;
+    }
+    if (buf->wptr < buf->rptr)
+    {
+        size_t a = buf->wptr - buf->data;
+        size_t b = buf->rptr - buf->wptr;
+        size_t c = buf->end - buf->rptr;
+        if ((a + c) <= b)
+        {
+            if (a <= c)
+            {
+                memcpy(buf->data + c, buf->data, a);
+            }
+            else
+            {
+                memmove(buf->data + c, buf->data, a);
+            }
+            memcpy(buf->data, buf->rptr, c);
+            buf->rptr = buf->data;
+            buf->wptr = buf->data + (a + c);
+            return true;
+        }
+    }
+
+    /* fallback */
+    {
+        size_t size = buf_ravail(buf);
+        char* tmp = malloc(size);
+        buf_read(buf, tmp, size);
+        assert(buf->rptr == buf->wptr && !buf->full);
+        buf->rptr = buf->wptr = buf->data;
+        buf_write(buf, tmp, size);
+        free(tmp);
+        assert(buf_ravail(buf) == size);
+    }
+
+    return true;
+}
