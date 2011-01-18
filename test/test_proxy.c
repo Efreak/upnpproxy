@@ -35,6 +35,9 @@ int main(int argc, char** argv)
     RUN_TEST(test_req2());
     RUN_TEST(test_req3());
     RUN_TEST(test_req4());
+
+    fprintf(stdout, "OK %u/%u\n", cnt, tot);
+
     return cnt == tot ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
