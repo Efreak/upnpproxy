@@ -58,6 +58,20 @@ void selector_add(selector_t selector, socket_t sock,
     client_t* c;
     assert(read_callback != NULL || write_callback != NULL);
 
+#ifdef DEBUG
+    {
+        size_t i;
+        for (i = 0, c = selector->client; i < selector->clients; ++i, ++c)
+        {
+            if (c->sock == sock)
+            {
+                assert(false);
+                break;
+            }
+        }
+    }
+#endif
+
     if (selector->clients == selector->clients_alloc)
     {
         size_t na = selector->clients_alloc * 2;
