@@ -1988,7 +1988,7 @@ static void daemon_setup_tunnel(daemon_t daemon, server_t* server,
         free(tmp);
         return;
     }
-    assert(tunnel->stasis);
+    assert(tunnel->source.remote.listening || tunnel->stasis);
     if (!setup_tunnel->ok)
     {
         char* tmp;
