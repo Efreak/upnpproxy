@@ -109,9 +109,9 @@ size_t http_proxy_write(http_proxy_t proxy, const void* data, size_t max)
     return ret;
 }
 
-bool http_proxy_flush(http_proxy_t proxy)
+bool http_proxy_flush(http_proxy_t proxy, bool force)
 {
-    proxy_flush(proxy, true);
+    proxy_flush(proxy, force);
     return buf_ravail(proxy->input) == 0;
 }
 
