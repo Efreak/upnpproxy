@@ -1013,18 +1013,11 @@ static void daemon_lost_server(daemon_t daemon, server_t* srv, bool wait)
         daemon_clear_remotes(daemon, srv);
     }
     srv->state = CONN_DEAD;
-    if (wait)
+    if (srv->reconnect_timecb == NULL)
     {
-        if (srv->reconnect_timecb == NULL)
-        {
-            srv->reconnect_timecb =
-                timers_add(daemon->timers, SERVER_RECONNECT_TIMER,
-                           srv, reconnect_server);
-        }
-    }
-    else
-    {
-        daemon_setup_remote_server(daemon, srv);
+        srv->reconnect_timecb =
+            timers_add(daemon->timers, wait ? SERVER_RECONNECT_TIMER : 1,
+                       srv, reconnect_server);
     }
 }
 
