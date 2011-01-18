@@ -2611,6 +2611,7 @@ void free_daemon(daemon_t daemon)
             {
                 selector_remove(daemon->selector, daemon->tunnel_port[i].sock);
                 socket_close(daemon->tunnel_port[i].sock);
+                daemon->tunnel_port[i].sock = -1;
             }
         }
         free(daemon->tunnel_port);
@@ -2620,6 +2621,7 @@ void free_daemon(daemon_t daemon)
     {
         selector_remove(daemon->selector, daemon->serv_sock);
         socket_close(daemon->serv_sock);
+        daemon->serv_sock = -1;
     }
     while (daemon->servers > 0)
     {
@@ -2885,6 +2887,7 @@ void server_free(daemon_t daemon, server_t* srv)
         }
         selector_remove(daemon->selector, srv->sock);
         socket_close(srv->sock);
+        srv->sock = -1;
     }
     server_free2(srv);
 
@@ -2964,6 +2967,7 @@ void remoteservice_free(void* _remote)
     {
         selector_remove(daemon->selector, remote->sock);
         socket_close(remote->sock);
+        remote->sock = -1;
     }
 
     free(remote->notify.host);
