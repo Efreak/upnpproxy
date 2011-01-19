@@ -179,7 +179,7 @@ static bool test2(const char* id, const char* srchost, const char* tgthost,
         transfer_output(output, outgoing, &o, &osize);
     }
 
-    while (!http_proxy_flush(proxy))
+    while (!http_proxy_flush(proxy, true))
     {
         size_t o2 = o;
         transfer_output(output, outgoing, &o, &osize);
