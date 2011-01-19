@@ -1,7 +1,7 @@
 MAINTAINERCLEANFILES = Makefile.in
 
 INCLUDES = -I$(top_srcdir)/src -I$(top_srcdir) @DEFINES@ \
-		   -DSYSCONFDIR='"@SYSCONFDIR@"' \
+		   -DSYSCONFDIR='"$(sysconfdir)"' \
 		   -DVERSION='"@VERSION@"'
 
 bin_PROGRAMS = upnpproxy ssdp_mon
