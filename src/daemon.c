@@ -220,6 +220,7 @@ int main(int argc, char** argv)
     int exitcode;
     memset(&daemon, 0, sizeof(daemon));
     daemon.serv_sock = -1;
+    daemon.daemonize = true;
     daemon.log = log_open();
     uuid_clear(daemon.uuid);
 
@@ -358,6 +359,10 @@ bool handle_args(daemon_t daemon, int argc, char** argv, int* exitcode)
     }
 
     daemon->debug = debug;
+    if (debug)
+    {
+        daemon->daemonize = false;
+    }
     if (cfg != NULL)
     {
         daemon->cfgfile = strdup(cfg);
