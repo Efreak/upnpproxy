@@ -4,9 +4,9 @@ INCLUDES = -I$(top_srcdir)/src -I$(top_srcdir) @DEFINES@ \
 		   -DSYSCONFDIR='"@SYSCONFDIR@"' \
 		   -DVERSION='"@VERSION@"'
 
-bin_PROGRAMS = daemon ssdp_mon
+bin_PROGRAMS = upnpproxy ssdp_mon
 
-daemon_SOURCES = daemon.c common.h \
+upnpproxy_SOURCES = daemon.c common.h \
                  ssdp.c ssdp.h \
 				 selector.c selector.h \
 				 timeval.c timeval.h \
