@@ -1,3 +1,5 @@
+/* Copyright (C) 2011, Joel Klinghed */
+
 #ifndef LOG_H
 #define LOG_H
 

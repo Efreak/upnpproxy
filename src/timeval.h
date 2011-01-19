@@ -1,3 +1,5 @@
+/* Copyright (C) 2011, Joel Klinghed */
+
 #ifndef TIMEVAL_H
 #define TIMEVAL_H
 

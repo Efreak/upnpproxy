@@ -1,3 +1,5 @@
+# Copyright (C) 2011, Joel Klinghed
+
 AC_INIT([upnpproxy], [0.1], [the_jk@yahoo.com])
 AC_CONFIG_MACRO_DIR([m4])
 

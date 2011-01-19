@@ -1,3 +1,5 @@
+/* Copyright (C) 2011, Joel Klinghed */
+
 #ifndef SSDP_H
 #define SSDP_H
 

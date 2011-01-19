@@ -1,3 +1,5 @@
+/* Copyright (C) 2011, Joel Klinghed */
+
 #ifndef MAP_H
 #define MAP_H
 

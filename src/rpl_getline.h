@@ -1,3 +1,5 @@
+/* Copyright (C) 2011, Joel Klinghed */
+
 #ifndef RPL_GETLINE_H
 #define RPL_GETLINE_H
 

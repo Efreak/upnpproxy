@@ -1,3 +1,5 @@
+/* Copyright (C) 2011, Joel Klinghed */
+
 #ifndef TIMERS_H
 #define TIMERS_H
 

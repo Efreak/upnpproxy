@@ -1,3 +1,5 @@
+/* Copyright (C) 2011, Joel Klinghed */
+
 #ifndef HTTP_PROXY_H
 #define HTTP_PROXY_H
 

@@ -1,3 +1,5 @@
+/* Copyright (C) 2011, Joel Klinghed */
+
 #ifndef VECTOR_H
 #define VECTOR_H
 

@@ -1,3 +1,5 @@
+/* Copyright (C) 2011, Joel Klinghed */
+
 #ifndef COMPAT_H
 #define COMPAT_H
 

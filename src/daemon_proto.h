@@ -1,3 +1,5 @@
+/* Copyright (C) 2011, Joel Klinghed */
+
 #ifndef DAEMON_PROTO_H
 #define DAEMON_PROTO_H
 

@@ -1,3 +1,5 @@
+/* Copyright (C) 2011, Joel Klinghed */
+
 #include "common.h"
 
 #include "http_proxy.h"

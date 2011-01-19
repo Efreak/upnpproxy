@@ -1,3 +1,5 @@
+/* Copyright (C) 2011, Joel Klinghed */
+
 #ifndef SOCKET_H
 #define SOCKET_H
 
