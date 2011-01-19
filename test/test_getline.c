@@ -7,21 +7,35 @@
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
+#include <limits.h>
 
 #define RUN_TEST(_test) \
     ++tot; cnt += _test ? 1 : 0
 
 static bool test1(unsigned char cnt);
+static char* root = NULL;
 
 int main(int argc, char** argv)
 {
     unsigned int tot = 0, cnt = 0;
+    const char* srcdir = getenv("srcdir");
+
+    if (srcdir != NULL)
+    {
+        root = strdup(srcdir);
+    }
+    else
+    {
+        root = strdup(".");
+    }
 
     RUN_TEST(test1(1));
     RUN_TEST(test1(2));
     RUN_TEST(test1(3));
 
     fprintf(stdout, "OK %u/%u\n", cnt, tot);
+
+    free(root);
 
     return cnt == tot ? EXIT_SUCCESS : EXIT_FAILURE;
 }
@@ -30,14 +44,14 @@ static const char* test1data[] = { "1", "2", "", "3", "test" };
 
 static bool test1(unsigned char cnt)
 {
-    char tmp[20];
+    char tmp[PATH_MAX];
     FILE* fh;
     unsigned int i = 0;
     bool ok = true;
     char* line = NULL;
     size_t linelen;
     int ret;
-    snprintf(tmp, sizeof(tmp), "data/test1-%u", cnt);
+    snprintf(tmp, sizeof(tmp), "%s/data/test1-%u", root, cnt);
     fh = fopen(tmp, "rb");
     if (fh == NULL)
     {
