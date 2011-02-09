@@ -1,4 +1,8 @@
 upnpproxy - An UPnP proxy.
 
-Start on daemon on each network, connect them together and suddenly all the
-UPnP services available on network A will be visible on network B and vice versa. All communication between clients on network A to UPnP services on network B will go through the daemon process.
+Start on daemon on each network, connect them together and suddenly
+all the UPnP services available on network A will be visible on
+network B and vice versa. All communication between clients on
+network A to UPnP services on network B will go through the daemon process.
+
+See COPYING for license information.
