@@ -157,7 +157,7 @@ void inet_setup(ssdp_t ssdp, const char* name, inet_t* inet,
 {
     if (bind)
     {
-        inet->rsock = socket_udp_listen(any, port);
+        inet->rsock = socket_udp_listen(mcast, port);
         if (inet->rsock >= 0)
         {
             if (!socket_multicast_join(inet->rsock, mcast, bindaddr))
@@ -176,8 +176,8 @@ void inet_setup(ssdp_t ssdp, const char* name, inet_t* inet,
         }
         else
         {
-            log_printf(ssdp->log, LVL_WARN, "Error listening on *:%u %s: %s",
-                       port, name, socket_strerror(inet->rsock));
+            log_printf(ssdp->log, LVL_WARN, "Error listening on %s:%u %s: %s",
+                       mcast, port, name, socket_strerror(inet->rsock));
         }
     }
     else
