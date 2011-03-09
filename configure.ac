@@ -61,7 +61,22 @@ AC_DEFINE_UNQUOTED([HAVE_INET6], [$have_inet6], [define to 1 if struct sockaddr_
 
 # uuid
 
-AC_SEARCH_LIBS([uuid_generate], [uuid],, AC_MSG_ERROR([Need uuid_generate]))
+have_uuid_generate=
+have_uuid_create=
+
+AC_CHECK_FUNC([uuid_create],have_uuid_create=1,have_uuid_create=0)
+
+AC_SEARCH_LIBS([uuid_generate], [uuid],
+               have_uuid_generate=1, have_uuid_generate=0)
+if test "x$have_uuid_generate" = "x1"; then
+  AC_CHECK_HEADER([uuid/uuid.h],,have_uuid_generate=0)
+fi
+
+if test "x$have_uuid_generate" != "x1" -a "x$have_uuid_create" != "x1"; then
+  AC_MSG_ERROR([Need some way of creating UUID:s])
+fi
+AC_DEFINE_UNQUOTED([HAVE_UUID_GENERATE], [$have_uuid_generate], [define to 1 if uuid_generate is available])
+AC_DEFINE_UNQUOTED([HAVE_UUID_CREATE], [$have_uuid_create], [define to 1 if uuid_create is available])
 
 AM_CONFIG_HEADER([config.h])
 AC_OUTPUT([Makefile src/Makefile test/Makefile])

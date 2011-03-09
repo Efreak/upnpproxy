@@ -49,7 +49,11 @@
 #include <errno.h>
 #include <pwd.h>
 #include <signal.h>
-#include <uuid/uuid.h>
+#if HAVE_UUID_CREATE
+# include <uuid.h>
+#elif HAVE_UUID_GENERATE
+# include <uuid/uuid.h>
+#endif
 
 static const uint16_t DEFAULT_PORT = 24232;
 static const uint16_t DEFAULT_FIRST_TUNNEL_PORT = 24235;
@@ -251,7 +255,14 @@ int main(int argc, char** argv)
     daemon.serv_sock = -1;
     daemon.daemonize = true;
     daemon.log = log_open();
+#if HAVE_UUID_CREATE
+    {
+        uint32_t status;
+        uuid_create_nil(&daemon.uuid, &status);
+    }
+#elif HAVE_UUID_GENERATE
     uuid_clear(daemon.uuid);
+#endif
 
     if (!handle_args(&daemon, argc, argv, &exitcode))
     {
@@ -2681,7 +2692,11 @@ void free_daemon(daemon_t daemon)
     timers_free(daemon->timers);
     log_close(daemon->log);
     free(daemon->ssdp_s);
+#if HAVE_UUID_CREATE
+    /* noop */
+#elif HAVE_UUID_GENERATE
     uuid_clear(daemon->uuid);
+#endif
     free(daemon->bind_multicast);
     free(daemon->bind_server);
     free(daemon->cfgfile);
@@ -2702,7 +2717,16 @@ void daemon_reload_cb(int signum)
 static char* daemon_generate_uid(daemon_t daemon)
 {
     char* uid = calloc(45, 1);
-    if (uuid_is_null(daemon->uuid))
+    bool is_null;
+#if HAVE_UUID_CREATE
+    {
+        uint32_t status;
+        is_null = uuid_is_nil(&daemon->uuid, &status) != 0;
+    }
+#elif HAVE_UUID_GENERATE
+    is_null = uuid_is_null(daemon->uuid);
+#endif
+    if (is_null)
     {
         const char* dir = getenv("XDG_CACHE_HOME");
         char* tmp2 = NULL;
@@ -2745,19 +2769,45 @@ static char* daemon_generate_uid(daemon_t daemon)
                     in = trim(line);
                     if (*in == '\0')
                         continue;
+#if HAVE_UUID_CREATE
+                    {
+                        uint32_t status;
+                        uuid_from_string(in, &daemon->uuid, &status);
+                        if (status == uuid_s_ok)
+                        {
+                            break;
+                        }
+                    }
+#elif HAVE_UUID_GENERATE
                     if (uuid_parse(in, daemon->uuid) == 0)
                     {
                         break;
                     }
+#endif
                 }
                 free(line);
                 fclose(fh);
             }
         }
 
-        if (uuid_is_null(daemon->uuid))
+#if HAVE_UUID_CREATE
         {
+            uint32_t status;
+            is_null = uuid_is_nil(&daemon->uuid, &status) != 0;
+        }
+#elif HAVE_UUID_GENERATE
+        is_null = uuid_is_null(daemon->uuid);
+#endif
+        if (is_null)
+        {
+#if HAVE_UUID_CREATE
+            {
+                uint32_t status;
+                uuid_create(&daemon->uuid, &status);
+            }
+#elif HAVE_UUID_GENERATE
             uuid_generate(daemon->uuid);
+#endif
 
             if (tmp != NULL)
             {
@@ -2777,8 +2827,21 @@ static char* daemon_generate_uid(daemon_t daemon)
                 }
                 if (fh != NULL)
                 {
+#if HAVE_UUID_CREATE
+                    {
+                        uint32_t status;
+                        char* tmp = NULL;
+                        uuid_to_string(&daemon->uuid, &tmp, &status);
+                        if (status == uuid_s_ok)
+                        {
+                            fputs(tmp, fh);
+                            free(tmp);
+                        }
+                    }
+#elif HAVE_UUID_GENERATE
                     uuid_unparse_lower(daemon->uuid, uid);
                     fputs(uid, fh);
+#endif
                     fputs("\n\n", fh);
                     fclose(fh);
                 }
@@ -2792,7 +2855,24 @@ static char* daemon_generate_uid(daemon_t daemon)
         free(tmp);
     }
     memcpy(uid, "uuid:", 5);
+#if HAVE_UUID_CREATE
+    {
+        uint32_t status;
+        char* tmp = NULL;
+        uuid_to_string(&daemon->uuid, &tmp, &status);
+        if (status == uuid_s_ok)
+        {
+            strcpy(uid + 5, tmp);
+            free(tmp);
+        }
+        else
+        {
+            uid[5] = '\0';
+        }
+    }
+#elif HAVE_UUID_GENERATE
     uuid_unparse_lower(daemon->uuid, uid + 5);
+#endif
     return uid;
 }
 
