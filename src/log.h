@@ -45,6 +45,10 @@ bool log_reopen(log_t log, const char* url);
 void log_close(log_t log);
 
 void log_puts(log_t log, log_lvl_t lvl, const char* msg);
-void log_printf(log_t log, log_lvl_t lvl, const char* format, ...);
+void log_printf(log_t log, log_lvl_t lvl, const char* format, ...)
+#if HAVE___ATTRIBUTE__
+    __attribute__((format (printf, 3, 4)))
+#endif
+;
 
 #endif /* LOG_H */

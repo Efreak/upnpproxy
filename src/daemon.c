@@ -1928,7 +1928,7 @@ static void daemon_create_tunnel(daemon_t daemon, server_t* server,
         char* tmp;
         asprinthost(&tmp, server->host, server->hostlen);
         log_printf(daemon->log, LVL_WARN, "Server %s requesting a tunnel for non-existant service %lu",
-                   tmp, key.id);
+                   tmp, (unsigned long)key.id);
         free(tmp);
         pkg_setup_tunnel(&pkg, create_tunnel->tunnel_id, false, 0);
         daemon_server_write_pkg(server, &pkg, true);
@@ -2041,7 +2041,7 @@ static void daemon_setup_tunnel(daemon_t daemon, server_t* server,
     {
         char* tmp;
         asprinthost(&tmp, server->host, server->hostlen);
-        log_printf(daemon->log, LVL_WARN, "Got setup from server %s for non-existant tunnel %lu", tmp, setup_tunnel->tunnel_id);
+        log_printf(daemon->log, LVL_WARN, "Got setup from server %s for non-existant tunnel %lu", tmp, (unsigned long)setup_tunnel->tunnel_id);
         free(tmp);
         return;
     }
@@ -2050,7 +2050,7 @@ static void daemon_setup_tunnel(daemon_t daemon, server_t* server,
     {
         char* tmp;
         asprinthost(&tmp, server->host, server->hostlen);
-        log_printf(daemon->log, LVL_WARN, "Server %s failed to setup tunnel %lu", tmp, setup_tunnel->tunnel_id);
+        log_printf(daemon->log, LVL_WARN, "Server %s failed to setup tunnel %lu", tmp, (unsigned long)setup_tunnel->tunnel_id);
         free(tmp);
         map_remove(server->remote_tunnels, tunnel);
         return;
@@ -2063,7 +2063,7 @@ static void daemon_setup_tunnel(daemon_t daemon, server_t* server,
         {
             char* tmp;
             asprinthost(&tmp, server->host, server->hostlen);
-            log_printf(daemon->log, LVL_WARN, "Server %s failed to provide a port for tunnel %lu", tmp, setup_tunnel->tunnel_id);
+            log_printf(daemon->log, LVL_WARN, "Server %s failed to provide a port for tunnel %lu", tmp, (unsigned long)setup_tunnel->tunnel_id);
             free(tmp);
             daemon_lost_tunnel(tunnel);
             return;
