@@ -2493,7 +2493,6 @@ bool load_config(daemon_t daemon)
         return false;
     }
 
-    cfg_close(cfg);
 
     if (safestrcmp(bind_multicast, daemon->bind_multicast) != 0)
     {
@@ -2653,6 +2652,8 @@ bool load_config(daemon_t daemon)
         server = NULL;
         server_cnt = 0;
     }
+
+    cfg_close(cfg);
 
     return true;
 }
