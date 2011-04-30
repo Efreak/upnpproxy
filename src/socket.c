@@ -644,7 +644,7 @@ ssize_t socket_udp_write(socket_t sock, const void* data, size_t max,
 
 bool socket_blockingerror(socket_t sock)
 {
-    return errno == EAGAIN;
+    return errno == EAGAIN || errno == EWOULDBLOCK;
 }
 
 const char* socket_strerror(socket_t sock)
