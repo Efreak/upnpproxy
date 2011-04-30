@@ -1132,7 +1132,7 @@ static bool parse_location(const char* location, char** proto,
         ++pos;
         errno = 0;
         x = strtoul(pos, &end, 10);
-        if (errno || !end || *end || x < 1 || x >= 65535)
+        if (errno || !end || (*end != '/' && *end != '\0') || x < 1 || x >= 65535)
         {
             return false;
         }
@@ -2120,9 +2120,18 @@ static void daemon_server_incoming_cb(void* userdata, socket_t sock)
             }
 
             asprinthost(&tmp, server->host, server->hostlen);
-            log_printf(daemon->log, LVL_WARN,
-                       "Unable to connect to server %s: %s",
-                       tmp, socket_strerror(sock));
+            if (got == 0)
+            {
+                log_printf(daemon->log, LVL_WARN,
+                           "Unable to connect to server %s: Connection closed",
+                           tmp);
+            }
+            else
+            {
+                log_printf(daemon->log, LVL_WARN,
+                           "Unable to connect to server %s: %s",
+                           tmp, socket_strerror(sock));
+            }
             free(tmp);
             daemon_lost_server(daemon, server, true);
             return;
@@ -3112,6 +3121,10 @@ static int _daemon_server_flush_output(server_t* server)
     size_t avail;
     const char* ptr;
     ssize_t got;
+    if (server->state != CONN_CONNECTED)
+    {
+        return 1;
+    }
     for (;;)
     {
         ptr = buf_rptr(server->out, &avail);
@@ -3123,7 +3136,7 @@ static int _daemon_server_flush_output(server_t* server)
         if (got <= 0)
         {
             char* tmp;
-            if (socket_blockingerror(server->sock))
+            if (socket_blockingerror(server->sock) || got == 0)
             {
                 return 1;
             }
