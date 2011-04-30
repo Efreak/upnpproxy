@@ -79,4 +79,4 @@ AC_DEFINE_UNQUOTED([HAVE_UUID_GENERATE], [$have_uuid_generate], [define to 1 if 
 AC_DEFINE_UNQUOTED([HAVE_UUID_CREATE], [$have_uuid_create], [define to 1 if uuid_create is available])
 
 AM_CONFIG_HEADER([config.h])
-AC_OUTPUT([Makefile src/Makefile test/Makefile])
+AC_OUTPUT([Makefile src/Makefile test/Makefile doc/Makefile])
