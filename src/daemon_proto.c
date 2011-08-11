@@ -389,7 +389,7 @@ bool pkg_peek(buf_t buf, pkg_t* pkg)
             if (rptr.ptravail >= pkglen - 4)
             {
                 uint8_t* ptr = (uint8_t*)rptr.ptr;
-                uint16_t len;
+                uint32_t len;
                 len = ptr[0] << 24 | ptr[1] << 16 | ptr[2] << 8 | ptr[3];
                 ptr += 4;
                 pkg->content.new_service.usn = (char*)ptr;
