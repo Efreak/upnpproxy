@@ -85,6 +85,7 @@ typedef struct _server_t
     struct sockaddr* host;
     socklen_t hostlen;
 
+    bool got_any_data;
     timecb_t reconnect_timecb;
 
     conn_state_t state;
@@ -1072,6 +1073,7 @@ static void daemon_lost_server(daemon_t daemon, server_t* srv, bool wait)
         daemon_clear_remotes(daemon, srv);
     }
     srv->state = CONN_DEAD;
+    srv->got_any_data = false;
     if (srv->reconnect_timecb == NULL)
     {
         srv->reconnect_timecb =
@@ -2197,7 +2199,7 @@ static void daemon_server_incoming_cb(void* userdata, socket_t sock)
                                tmp,
                                socket_strerror(sock));
                     free(tmp);
-                    daemon_lost_server(daemon, server, false);
+                    daemon_lost_server(daemon, server, !server->got_any_data);
                     return;
                 }
             }
@@ -2209,11 +2211,12 @@ static void daemon_server_incoming_cb(void* userdata, socket_t sock)
                            "Lost connection with server %s: Connection closed",
                            tmp);
                 free(tmp);
-                daemon_lost_server(daemon, server, false);
+                daemon_lost_server(daemon, server, !server->got_any_data);
                 return;
             }
             else
             {
+                server->got_any_data = true;
                 buf_wmove(server->in, got);
             }
         }
