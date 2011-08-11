@@ -148,9 +148,15 @@ void pkg_init(pkg_t pkg, const char* format, ...)
 {
     va_list args;
     char* tmp;
+    int ret;
     va_start(args, format);
-    vasprintf(&tmp, format, args);
+    ret = vasprintf(&tmp, format, args);
     va_end(args);
+    if (ret == -1)
+    {
+        assert(false);
+        return;
+    }
     pkg_append(pkg, tmp);
     free(tmp);
     pkg_append(pkg, "\r\n");

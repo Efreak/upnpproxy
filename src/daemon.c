@@ -576,13 +576,20 @@ static char* find_config(void)
     {
         if (home != NULL && *home != '\0')
         {
-            asprintf(&tmp2, "%s/.config", home);
+            if (asprintf(&tmp2, "%s/.config", home) == -1)
+            {
+                return NULL;
+            }
             dir = tmp2;
         }
     }
     if (dir != NULL && *dir != '\0')
     {
-        asprintf(&tmp, "%s/upnpproxy.conf", dir);
+        if (asprintf(&tmp, "%s/upnpproxy.conf", dir) == -1)
+        {
+            free(tmp2);
+            return NULL;
+        }
         if (access(tmp, R_OK) == 0)
         {
             free(tmp2);
@@ -604,7 +611,11 @@ static char* find_config(void)
         char* token = strtok(dirtmp, ":");
         while (token != NULL)
         {
-            asprintf(&tmp, "%s/upnpproxy.conf", token);
+            if (asprintf(&tmp, "%s/upnpproxy.conf", token) == -1)
+            {
+                free(dirtmp);
+                return NULL;
+            }
             if (access(tmp, R_OK) == 0)
             {
                 free(dirtmp);
@@ -618,7 +629,10 @@ static char* find_config(void)
     }
     if (home != NULL && *home != '\0')
     {
-        asprintf(&tmp, "%s/.upnpproxy.conf", dir);
+        if (asprintf(&tmp, "%s/.upnpproxy.conf", dir) == -1)
+        {
+            return NULL;
+        }
         if (access(tmp, R_OK) == 0)
         {
             return tmp;
@@ -1177,11 +1191,19 @@ static char* build_location(const char* proto, const struct sockaddr* host,
     *pos = '\0';
     if (addr_is_ipv6(host, hostlen))
     {
-        asprintf(&ret, "%s://[%s]:%u/%s", proto, tmp, port, path);
+        if (asprintf(&ret, "%s://[%s]:%u/%s", proto, tmp, port, path) == -1)
+        {
+            free(tmp);
+            return NULL;
+        }
     }
     else
     {
-        asprintf(&ret, "%s://%s:%u/%s", proto, tmp, port, path);
+        if (asprintf(&ret, "%s://%s:%u/%s", proto, tmp, port, path) == -1)
+        {
+            free(tmp);
+            return NULL;
+        }
     }
     free(tmp);
     return ret;
@@ -1505,7 +1527,7 @@ static bool flush_conn(daemon_t daemon, tunnel_t* tunnel,
                            "%s tunnel %s connection closed before sending %lu bytes of queued data",
                            tunnel->remote ? "Remote" : "Local",
                            in_conn == &tunnel->local_conn ? "local" : "daemon",
-                           buf_ravail(in_conn->buf));
+                           (unsigned long)buf_ravail(in_conn->buf));
             }
             if (proxy != NULL)
             {
@@ -1568,7 +1590,7 @@ static bool flush_conn(daemon_t daemon, tunnel_t* tunnel,
                        "%s tunnel %s connection closed when sending %lu bytes of queued data",
                        tunnel->remote ? "Remote" : "Local",
                        in_conn == &tunnel->local_conn ? "local" : "daemon",
-                       avail);
+                       (unsigned long)avail);
             close_conn(daemon, in_conn);
             return true;
         }
@@ -2754,13 +2776,19 @@ static char* daemon_generate_uid(daemon_t daemon)
             }
             if (home != NULL && *home != '\0')
             {
-                asprintf(&tmp2, "%s/.cache", home);
+                if (asprintf(&tmp2, "%s/.cache", home) == -1)
+                {
+                    return NULL;
+                }
                 dir = tmp2;
             }
         }
         if (dir != NULL && *dir != '\0')
         {
-            asprintf(&tmp, "%s/upnpproxy.cache", dir);
+            if (asprintf(&tmp, "%s/upnpproxy.cache", dir) == -1)
+            {
+                return NULL;
+            }
             free(tmp2);
         }
         if (tmp != NULL)

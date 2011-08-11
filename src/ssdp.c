@@ -257,7 +257,11 @@ bool ssdp_search(ssdp_t ssdp, ssdp_search_t* search)
     }
     req_addheader(req, "ST", search->st);
     req_addheader(req, "Man", "\"ssdp:discover\"");
-    asprintf(&tmp, "%u", search->mx);
+    if (asprintf(&tmp, "%u", search->mx) == -1)
+    {
+        req_free(req);
+        return false;
+    }
     req_addheader(req, "MX", tmp);
     free(tmp);
     ret = req_send(req, inet->wsock, inet->notify_host, inet->notify_hostlen,
@@ -303,8 +307,12 @@ bool ssdp_search_response(ssdp_t ssdp, ssdp_search_t* search,
         resp_addheader(resp, "S", search->s);
     }
     resp_addheader(resp, "Ext", "");
-    asprintf(&tmp, "no-cache=\"Ext\", max-age = %u",
-             ((unsigned int)(notify->expires - time(NULL))));
+    if (asprintf(&tmp, "no-cache=\"Ext\", max-age = %u",
+                 ((unsigned int)(notify->expires - time(NULL)))) == -1)
+    {
+        resp_free(resp);
+        return false;
+    }
     resp_addheader(resp, "Cache-Control", tmp);
     free(tmp);
     resp_addheader(resp, "ST", search->st);
@@ -386,8 +394,12 @@ bool ssdp_notify(ssdp_t ssdp, ssdp_notify_t* notify)
     req_addheader(req, "NTS", "ssdp:alive");
     req_addheader(req, "USN", notify->usn);
     req_addheader(req, "Location", notify->location);
-    asprintf(&tmp, "max-age = %u",
-             ((unsigned int)(notify->expires - time(NULL))));
+    if (asprintf(&tmp, "max-age = %u",
+                 ((unsigned int)(notify->expires - time(NULL)))) == -1)
+    {
+        req_free(req);
+        return false;
+    }
     req_addheader(req, "Cache-Control", tmp);
     if (notify->server != NULL)
         req_addheader(req, "Server", notify->server);
