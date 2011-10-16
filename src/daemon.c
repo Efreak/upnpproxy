@@ -2605,6 +2605,10 @@ bool load_config(daemon_t daemon)
                 daemon->tunnel_port = realloc(daemon->tunnel_port, nc * sizeof(tunnel_port_t));
                 memset(daemon->tunnel_port + i, 0,
                        (nc - i) * sizeof(tunnel_port_t));
+                for (j = i; j < nc; ++j)
+                {
+                    daemon->tunnel_port[j].sock = -1;
+                }
                 daemon->tunnel_port_count = nc;
             }
         }
