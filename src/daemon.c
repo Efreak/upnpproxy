@@ -2257,6 +2257,24 @@ static void daemon_server_incoming_cb(void* userdata, socket_t sock)
 
 static int _daemon_server_flush_output(server_t* server);
 
+static void daemon_server_connected(server_t* server)
+{
+    size_t i;
+    daemon_t daemon = server->daemon;
+    assert(server->state == CONN_CONNECTED);
+
+    for (i = map_begin(daemon->locals); i != map_end(daemon->locals);
+         i = map_next(daemon->locals, i))
+    {
+        pkg_t pkg;
+        localservice_t* local = map_getat(daemon->locals, i);
+        pkg_new_service(&pkg, local->id, local->usn, local->location,
+                        local->service, local->server, local->opt,
+                        local->nls);
+        daemon_server_write_pkg(server, &pkg, false);
+    }
+}
+
 static void daemon_server_writable_cb(void* userdata, socket_t sock)
 {
     server_t* server = userdata;
@@ -2269,23 +2287,9 @@ static void daemon_server_writable_cb(void* userdata, socket_t sock)
     case CONN_DEAD:
         return;
     case CONN_CONNECTING:
-    {
-        size_t i;
-        daemon_t daemon = server->daemon;
         server->state = CONN_CONNECTED;
-
-        for (i = map_begin(daemon->locals); i != map_end(daemon->locals);
-             i = map_next(daemon->locals, i))
-        {
-            pkg_t pkg;
-            localservice_t* local = map_getat(daemon->locals, i);
-            pkg_new_service(&pkg, local->id, local->usn, local->location,
-                            local->service, local->server, local->opt,
-                            local->nls);
-            daemon_server_write_pkg(server, &pkg, false);
-        }
+        daemon_server_connected(server);
         break;
-    }
     case CONN_CONNECTED:
         break;
     }
@@ -2353,6 +2357,7 @@ static void daemon_server_accept_cb(void* userdata, socket_t sock)
                 }
                 daemon->server[i].state = CONN_CONNECTED;
                 daemon->server[i].sock = s;
+                daemon_server_connected(daemon->server + i);
                 socket_setblocking(s, false);
                 selector_add(daemon->selector, daemon->server[i].sock,
                              daemon->server + i,
@@ -2360,6 +2365,7 @@ static void daemon_server_accept_cb(void* userdata, socket_t sock)
                              daemon_server_writable_cb);
                 selector_chkwrite(daemon->selector, daemon->server[i].sock,
                                   false);
+                daemon_server_flush_output(daemon->server + i);
                 break;
             case CONN_CONNECTING:
                 selector_remove(daemon->selector, daemon->server[i].sock);
