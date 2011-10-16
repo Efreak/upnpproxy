@@ -51,13 +51,15 @@ socket_t socket_udp_listen(const char* bindaddr, uint16_t port);
 socket_t socket_tcp_listen2(const struct sockaddr* addr, socklen_t addrlen);
 socket_t socket_udp_listen2(const struct sockaddr* addr, socklen_t addrlen);
 
-socket_t socket_tcp_connect(const char* host, uint16_t port, bool block);
-socket_t socket_udp_connect(const char* host, uint16_t port, bool block);
+socket_t socket_tcp_connect(const char* host, uint16_t port, bool block,
+                            const char* bindaddr);
+socket_t socket_udp_connect(const char* host, uint16_t port, bool block,
+                            const char* bindaddr);
 
 socket_t socket_tcp_connect2(const struct sockaddr* addr, socklen_t addrlen,
-                             bool block);
+                             bool block, const char* bindaddr);
 socket_t socket_udp_connect2(const struct sockaddr* addr, socklen_t addrlen,
-                             bool block);
+                             bool block, const char* bindaddr);
 
 socket_t socket_accept(socket_t sock,
                        struct sockaddr** addr, socklen_t* addrlen);

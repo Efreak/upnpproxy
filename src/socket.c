@@ -303,13 +303,31 @@ static socket_t socket_listen(int type, const char* bindaddr, uint16_t port)
 
 static socket_t socket_connect2(int type,
                                 const struct sockaddr* addr, socklen_t addrlen,
-                                bool block)
+                                bool block, const char* bindaddr)
 {
     socket_t sock;
+    socklen_t _bindlen = 0;
+    struct sockaddr* _bind = parse_addr(bindaddr, 0, &_bindlen, true);
+    if (_bind != NULL && _bind->sa_family != addr->sa_family)
+    {
+        free(_bind);
+        return -1;
+    }
     sock = socket(domain(addr->sa_family), type, 0);
     if (sock < 0)
     {
+        free(_bind);
         return -1;
+    }
+    if (_bind != NULL)
+    {
+        if (bind(sock, _bind, _bindlen))
+        {
+            close(sock);
+            free(_bind);
+            return -1;
+        }
+        free(_bind);
     }
     if (!socket_setblocking(sock, block))
     {
@@ -327,7 +345,8 @@ static socket_t socket_connect2(int type,
     return sock;
 }
 
-static socket_t socket_connect(int type, const char* host, uint16_t port, bool block)
+static socket_t socket_connect(int type, const char* host, uint16_t port,
+                               bool block, const char* bindaddr)
 {
     socklen_t addrlen;
     struct sockaddr* addr = parse_addr(host, port, &addrlen, true);
@@ -336,7 +355,7 @@ static socket_t socket_connect(int type, const char* host, uint16_t port, bool b
     {
         return -1;
     }
-    sock = socket_connect2(type, addr, addrlen, block);
+    sock = socket_connect2(type, addr, addrlen, block, bindaddr);
     free(addr);
     return sock;
 }
@@ -361,26 +380,28 @@ socket_t socket_udp_listen2(const struct sockaddr* addr, socklen_t addrlen)
     return socket_listen2(SOCK_DGRAM, -1, addr, addrlen);
 }
 
-socket_t socket_tcp_connect(const char* host, uint16_t port, bool block)
+socket_t socket_tcp_connect(const char* host, uint16_t port, bool block,
+                            const char* bindaddr)
 {
-    return socket_connect(SOCK_STREAM, host, port, block);
+    return socket_connect(SOCK_STREAM, host, port, block, bindaddr);
 }
 
-socket_t socket_udp_connect(const char* host, uint16_t port, bool block)
+socket_t socket_udp_connect(const char* host, uint16_t port, bool block,
+                            const char* bindaddr)
 {
-    return socket_connect(SOCK_DGRAM, host, port, block);
+    return socket_connect(SOCK_DGRAM, host, port, block, bindaddr);
 }
 
 socket_t socket_tcp_connect2(const struct sockaddr* addr, socklen_t addrlen,
-                             bool block)
+                             bool block, const char* bindaddr)
 {
-    return socket_connect2(SOCK_STREAM, addr, addrlen, block);
+    return socket_connect2(SOCK_STREAM, addr, addrlen, block, bindaddr);
 }
 
 socket_t socket_udp_connect2(const struct sockaddr* addr, socklen_t addrlen,
-                             bool block)
+                             bool block, const char* bindaddr)
 {
-    return socket_connect2(SOCK_DGRAM, addr, addrlen, block);
+    return socket_connect2(SOCK_DGRAM, addr, addrlen, block, bindaddr);
 }
 
 socket_t socket_accept(socket_t sock, struct sockaddr** addr, socklen_t* addrlen)

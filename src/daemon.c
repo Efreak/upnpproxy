@@ -1961,7 +1961,7 @@ static void daemon_create_tunnel(daemon_t daemon, server_t* server,
     tunnel.local_conn.sock = socket_tcp_connect2(
                                  tunnel.source.local.service->host,
                                  tunnel.source.local.service->hostlen,
-                                 false);
+                                 false, daemon->bind_services);
     if (tunnel.local_conn.sock < 0)
     {
         pkg_t pkg;
@@ -1998,7 +1998,8 @@ static void daemon_create_tunnel(daemon_t daemon, server_t* server,
         addr_setport(host, server->hostlen, create_tunnel->port);
         tunnelptr->daemon_conn.state = CONN_CONNECTING;
         tunnelptr->daemon_conn.sock = socket_tcp_connect2(host, server->hostlen,
-                                                          false);
+                                                          false,
+                                                          server->bind_server);
         if (tunnelptr->daemon_conn.sock < 0)
         {
             char* tmp;
@@ -2098,7 +2099,8 @@ static void daemon_setup_tunnel(daemon_t daemon, server_t* server,
 
         tunnel->daemon_conn.state = CONN_CONNECTING;
         tunnel->daemon_conn.sock = socket_tcp_connect2(host, server->hostlen,
-                                                       false);
+                                                       false,
+                                                       server->bind_server);
         if (tunnel->daemon_conn.sock < 0)
         {
             char* tmp;
@@ -2429,7 +2431,8 @@ static bool daemon_setup_remote_server(daemon_t daemon, server_t* srv)
         srv->out = buf_new(SERVER_BUFFER_OUT);
     }
     srv->state = CONN_CONNECTING;
-    srv->sock = socket_tcp_connect2(srv->host, srv->hostlen, false);
+    srv->sock = socket_tcp_connect2(srv->host, srv->hostlen, false,
+                                    daemon->bind_server);
     if (srv->sock < 0)
     {
         char* tmp;
