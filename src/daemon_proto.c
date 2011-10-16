@@ -72,10 +72,11 @@ void pkg_setup_tunnel(pkg_t* pkg, uint32_t tunnel_id, bool ok, uint16_t port)
     pkg->content.setup_tunnel.port = port;
 }
 
-void pkg_close_tunnel(pkg_t* pkg, uint32_t tunnel_id)
+void pkg_close_tunnel(pkg_t* pkg, uint32_t tunnel_id, bool local)
 {
     pkg->type = PKG_CLOSE_TUNNEL;
     pkg->content.close_tunnel.tunnel_id = tunnel_id;
+    pkg->content.close_tunnel.local = local;
 }
 
 typedef struct _write_ptr_t
@@ -204,7 +205,7 @@ bool pkg_write(buf_t buf, pkg_t* pkg)
         break;
     case PKG_CLOSE_TUNNEL:
         pkgtype = 12;
-        pkglen = 4;
+        pkglen = 4 + 1;
         break;
     }
     if (6 + pkglen > wptr.totavail)
@@ -247,6 +248,7 @@ bool pkg_write(buf_t buf, pkg_t* pkg)
         return true;
     case PKG_CLOSE_TUNNEL:
         write_uint32(&wptr, pkg->content.close_tunnel.tunnel_id);
+        write_uint8(&wptr, pkg->content.close_tunnel.local ? 1 : 0);
         write_done(&wptr);
         return true;
     default:
@@ -480,6 +482,7 @@ bool pkg_peek(buf_t buf, pkg_t* pkg)
         case 12:
             pkg->type = PKG_CLOSE_TUNNEL;
             pkg->content.close_tunnel.tunnel_id = read_uint32(&rptr);
+            pkg->content.close_tunnel.local = read_uint8(&rptr) != 0;
             read_done(&rptr);
             return true;
         default:
@@ -541,7 +544,8 @@ pkg_t* pkg_dup(const pkg_t* pkg)
                          pkg->content.setup_tunnel.port);
         break;
     case PKG_CLOSE_TUNNEL:
-        pkg_close_tunnel(ret, pkg->content.close_tunnel.tunnel_id);
+        pkg_close_tunnel(ret, pkg->content.close_tunnel.tunnel_id,
+                         pkg->content.close_tunnel.local);
         break;
     }
 

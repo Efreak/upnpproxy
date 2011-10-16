@@ -1367,7 +1367,7 @@ static void daemon_lost_tunnel(tunnel_t* tunnel)
         if (tunnel->daemon_conn.state >= CONN_DEAD)
         {
             pkg_t pkg;
-            pkg_close_tunnel(&pkg, tunnel->id);
+            pkg_close_tunnel(&pkg, tunnel->id, true);
             daemon_server_write_pkg(tunnel->source.remote.service->source, &pkg, true);
         }
     }
@@ -1377,18 +1377,10 @@ static void daemon_lost_tunnel(tunnel_t* tunnel)
         if (tunnel->daemon_conn.state >= CONN_DEAD)
         {
             pkg_t pkg;
-            pkg_close_tunnel(&pkg, tunnel->id);
+            pkg_close_tunnel(&pkg, tunnel->id, false);
             daemon_server_write_pkg(tunnel->source.local.server, &pkg, true);
         }
     }
-
-    if (tunnel->stasis)
-    {
-        daemon_release_tunnel_port(daemon, tunnel);
-    }
-
-    close_conn(daemon, &tunnel->local_conn);
-    close_conn(daemon, &tunnel->daemon_conn);
 
     if (tunnel->remote)
     {
@@ -1446,6 +1438,10 @@ static void tunnel_free(tunnel_t* tunnel)
     else
     {
         daemon = tunnel->source.local.server->daemon;
+    }
+    if (tunnel->stasis)
+    {
+        daemon_release_tunnel_port(daemon, tunnel);
     }
     free_conn(daemon, &tunnel->local_conn);
     free_conn(daemon, &tunnel->daemon_conn);
@@ -2050,9 +2046,17 @@ static void daemon_close_tunnel(daemon_t daemon, server_t* server,
 {
     tunnel_t key;
     key.id = close_tunnel->tunnel_id;
-    key.remote = false;
-    key.source.local.server = server;
-    map_remove(server->local_tunnels, &key);
+    if (close_tunnel->local)
+    {
+        key.remote = false;
+        key.source.local.server = server;
+        map_remove(server->local_tunnels, &key);
+    }
+    else
+    {
+        key.remote = true;
+        map_remove(server->remote_tunnels, &key);
+    }
 }
 
 static void daemon_setup_tunnel(daemon_t daemon, server_t* server,

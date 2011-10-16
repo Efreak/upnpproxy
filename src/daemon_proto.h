@@ -81,6 +81,8 @@ typedef struct
 typedef struct
 {
     uint32_t tunnel_id;
+    bool local; /* true if the server sending close_tunnel is the same
+                 * that did the create_tunnel. false otherwise. */
 } pkg_close_tunnel_t;
 
 typedef enum
@@ -115,7 +117,7 @@ void pkg_new_service(pkg_t* pkg, uint32_t service_id, char* usn, char* location,
 void pkg_old_service(pkg_t* pkg, uint32_t service_id);
 void pkg_create_tunnel(pkg_t* pkg, uint32_t service_id, uint32_t tunnel_id, char* host, uint16_t port);
 void pkg_setup_tunnel(pkg_t* pkg, uint32_t tunnel_id, bool ok, uint16_t port);
-void pkg_close_tunnel(pkg_t* pkg, uint32_t tunnel_id);
+void pkg_close_tunnel(pkg_t* pkg, uint32_t tunnel_id, bool local);
 
 /* Duplicate the given package */
 pkg_t* pkg_dup(const pkg_t* pkg);
