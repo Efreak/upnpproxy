@@ -125,7 +125,7 @@ bool test1(void)
         buf_free(buf);
         return false;
     }
-    pkg_close_tunnel(&pkg, 2424);
+    pkg_close_tunnel(&pkg, 2424, true);
     if (!pkg_write(buf, &pkg))
     {
         fprintf(stderr, "test1: pkg6 did not fit\n");
@@ -269,7 +269,8 @@ bool test1(void)
         case 5:
             if (pkg.type == PKG_CLOSE_TUNNEL)
             {
-                if (pkg.content.close_tunnel.tunnel_id != 2424)
+                if (pkg.content.close_tunnel.tunnel_id != 2424 ||
+                    !pkg.content.close_tunnel.local)
                 {
                     fprintf(stderr, "test1:pkg%lu: missmatched data\n",
                             i + 1);
