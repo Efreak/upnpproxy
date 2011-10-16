@@ -1999,7 +1999,7 @@ static void daemon_create_tunnel(daemon_t daemon, server_t* server,
         tunnelptr->daemon_conn.state = CONN_CONNECTING;
         tunnelptr->daemon_conn.sock = socket_tcp_connect2(host, server->hostlen,
                                                           false,
-                                                          server->bind_server);
+                                                          daemon->bind_server);
         if (tunnelptr->daemon_conn.sock < 0)
         {
             char* tmp;
@@ -2100,7 +2100,7 @@ static void daemon_setup_tunnel(daemon_t daemon, server_t* server,
         tunnel->daemon_conn.state = CONN_CONNECTING;
         tunnel->daemon_conn.sock = socket_tcp_connect2(host, server->hostlen,
                                                        false,
-                                                       server->bind_server);
+                                                       daemon->bind_server);
         if (tunnel->daemon_conn.sock < 0)
         {
             char* tmp;
