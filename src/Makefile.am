@@ -18,6 +18,7 @@ upnpproxy_SOURCES = daemon.c common.h \
 				 util.c util.h \
 				 daemon_proto.c daemon_proto.h \
 				 map.c map.h \
+				 bitmap.c bitmap.h \
 				 vector.c vector.h \
 				 timers.c timers.h \
 				 compat.h compat.c rpl_getline.x \

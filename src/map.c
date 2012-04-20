@@ -30,6 +30,7 @@
 #include "common.h"
 
 #include "map.h"
+#include "bitmap.h"
 #include <string.h>
 
 struct _map_t
@@ -39,6 +40,7 @@ struct _map_t
     map_eq_t eq_func;
     map_free_t free_func;
     char* table;
+    bitmap_t table_usage;
 };
 
 map_t map_new(size_t elementsize, map_hash_t hash_func, map_eq_t eq_func,
@@ -50,7 +52,7 @@ map_t map_new(size_t elementsize, map_hash_t hash_func, map_eq_t eq_func,
     map->hash_func = hash_func;
     map->eq_func = eq_func;
     map->free_func = free_func;
-    map->elementsize = elementsize + 1;
+    map->elementsize = elementsize;
     return map;
 }
 
@@ -63,16 +65,18 @@ void map_free(map_t map)
 
     if (map->count > 0 && map->free_func != NULL)
     {
-        char* ptr = map->table, * end = map->table + map->elementsize * map->tablesize;
-        for (; ptr < end; ptr += map->elementsize)
+        char* ptr = map->table;
+        size_t i;
+        for (i = 0; i < map->tablesize; i++, ptr += map->elementsize)
         {
-            if (*ptr != '\0')
+            if (bitmap_get(map->table_usage, i))
             {
-                map->free_func(ptr + 1);
+                map->free_func(ptr);
             }
         }
     }
 
+    bitmap_free(map->table_usage);
     free(map->table);
     free(map);
 }
@@ -84,123 +88,158 @@ size_t map_size(map_t map)
 
 void* map_put(map_t map, const void* element)
 {
-    char* ptr, * end;
+    size_t i;
 
     if (map->count == map->limit)
     {
         size_t ns = map->tablesize * 2;
-        char* tmp;
+        char* tmp, * ptr;
+        bitmap_t usage;
         if (ns < 64)
         {
             ns = 64;
         }
-        tmp = realloc(map->table, ns * map->elementsize);
+        tmp = calloc(ns, map->elementsize);
         if (tmp == NULL)
         {
             ns = ((map->limit + 1) * 4 + 2) / 3;
-            tmp = realloc(map->table, ns * map->elementsize);
+            tmp = calloc(ns, map->elementsize);
             if (tmp == NULL)
             {
                 assert(false);
                 return NULL;
             }
         }
-        memset(tmp + map->tablesize * map->elementsize, 0,
-               (ns - map->tablesize) * map->elementsize);
+        usage = bitmap_new(ns, false);
+
+        ptr = map->table;
+        for (i = 0; i < map->tablesize; i++, ptr += map->elementsize)
+        {
+            if (bitmap_get(map->table_usage, i))
+            {
+                size_t ni = map->hash_func(ptr) % ns;
+                for (;;)
+                {
+                    if (!bitmap_get(usage, ni))
+                    {
+                        break;
+                    }
+                    if (++ni == ns)
+                    {
+                        ni = 0;
+                    }
+                }
+                bitmap_set(usage, ni, true);
+                memcpy(tmp + ni * map->elementsize, ptr, map->elementsize);
+            }
+        }
+
+        bitmap_free(map->table_usage);
+        free(map->table);
+
         map->table = tmp;
         map->tablesize = ns;
+        map->table_usage = usage;
         map->limit = (map->tablesize * 3) / 4;
         assert(map->limit > map->count);
     }
 
-    ptr = map->table + map->elementsize * (map->hash_func(element) % map->tablesize);
-    end = map->table + map->elementsize * map->tablesize;
+    i = map->hash_func(element) % map->tablesize;
 
     for (;;)
     {
-        if (*ptr == '\0')
+        if (!bitmap_get(map->table_usage, i))
         {
-            *ptr = '\1';
-            memcpy(ptr + 1, element, map->elementsize - 1);
+            void* ptr = map->table + map->elementsize * i;
+            bitmap_set(map->table_usage, i, true);
+            memcpy(ptr, element, map->elementsize);
             map->count++;
-            return ptr + 1;
+            return ptr;
         }
 
-        ptr += map->elementsize;
-        if (ptr == end)
+        if (++i == map->tablesize)
         {
-            ptr = map->table;
+            i = 0;
         }
     }
 }
 
 void* map_get(map_t map, const void* element)
 {
-    char* ptr, * end;
+    char* ptr;
+    size_t i;
 
     if (map->count == 0)
     {
         return NULL;
     }
 
-    ptr = map->table + map->elementsize * (map->hash_func(element) % map->tablesize);
-    end = map->table + map->elementsize * map->tablesize;
+    i = map->hash_func(element) % map->tablesize;
+    ptr = map->table + map->elementsize * i;
 
     for (;;)
     {
-        if (*ptr == '\0')
+        if (!bitmap_get(map->table_usage, i))
         {
             return NULL;
         }
 
-        if (map->eq_func(ptr + 1, element))
+        if (map->eq_func(ptr, element))
         {
-            return ptr + 1;
+            return ptr;
         }
 
-        ptr += map->elementsize;
-        if (ptr == end)
+        if (++i == map->tablesize)
         {
             ptr = map->table;
+            i = 0;
+        }
+        else
+        {
+            ptr += map->elementsize;
         }
     }
 }
 
 size_t map_remove(map_t map, const void* element)
 {
-    char* ptr, * end;
-    size_t ret = 0;
+    char* ptr;
+    size_t ret = 0, i;
 
     if (map->count == 0)
     {
         return ret;
     }
 
-    ptr = map->table + map->elementsize * (map->hash_func(element) % map->tablesize);
-    end = map->table + map->elementsize * map->tablesize;
+    i = map->hash_func(element) % map->tablesize;
+    ptr = map->table + map->elementsize * i;
 
     for (;;)
     {
-        if (*ptr == '\0')
+        if (!bitmap_get(map->table_usage, i))
         {
             return ret;
         }
 
-        if (map->eq_func(ptr + 1, element))
+        if (map->eq_func(ptr, element))
         {
             if (map->free_func != NULL)
             {
-                map->free_func(ptr + 1);
+                map->free_func(ptr);
             }
-            *ptr = '\0';
+            bitmap_set(map->table_usage, i, false);
             map->count--;
             ++ret;
         }
 
-        ptr += map->elementsize;
-        if (ptr == end)
+        if (++i == map->tablesize)
         {
             ptr = map->table;
+            i = 0;
+        }
+        else
+        {
+            ptr += map->elementsize;
         }
     }
 
@@ -209,12 +248,10 @@ size_t map_remove(map_t map, const void* element)
 
 void* map_getat(map_t map, size_t idx)
 {
-    char* ptr;
     assert(idx < map->tablesize);
-    ptr = map->table + idx * map->elementsize;
-    if (*ptr != '\0')
+    if (bitmap_get(map->table_usage, idx))
     {
-        return ptr + 1;
+        return map->table + idx * map->elementsize;
     }
     else
     {
@@ -224,7 +261,6 @@ void* map_getat(map_t map, size_t idx)
 
 size_t map_begin(map_t map)
 {
-    char* ptr;
     size_t idx = 0;
 
     if (map->count == 0)
@@ -232,17 +268,11 @@ size_t map_begin(map_t map)
         return map->tablesize;
     }
 
-    ptr = map->table;
-
-    for (;; ptr += map->elementsize)
+    for (;; idx++)
     {
-        if (*ptr != '\0')
+        if (bitmap_get(map->table_usage, idx))
         {
             return idx;
-        }
-        else
-        {
-            ++idx;
         }
     }
 }
@@ -254,59 +284,37 @@ size_t map_end(map_t map)
 
 size_t map_next(map_t map, size_t idx)
 {
-    char* ptr, * end;
     assert(idx <= map->tablesize);
     if (idx == map->tablesize)
     {
         return idx;
     }
     ++idx;
-    ptr = map->table + idx * map->elementsize;
-    end = map->table + map->tablesize * map->elementsize;
-    for (; ptr < end; ptr += map->elementsize)
+    for (; idx < map->tablesize; idx++)
     {
-        if (*ptr != '\0')
+        if (bitmap_get(map->table_usage, idx))
         {
-            return idx;
-        }
-        else
-        {
-            ++idx;
+            break;
         }
     }
-    return map->tablesize;
+    return idx;
 }
 
 size_t map_removeat(map_t map, size_t idx)
 {
-    char* ptr, * end;
     assert(idx <= map->tablesize);
     if (idx == map->tablesize)
     {
         return idx;
     }
-    ptr = map->table + idx * map->elementsize;
-    if (*ptr != '\0')
+    if (bitmap_get(map->table_usage, idx))
     {
         if (map->free_func != NULL)
         {
-            map->free_func(ptr + 1);
+            map->free_func(map->table + idx * map->elementsize);
         }
-        *ptr = '\0';
+        bitmap_set(map->table_usage, idx, false);
         map->count--;
     }
-    ++idx;
-    end = map->table + map->tablesize * map->elementsize;
-    for (ptr += map->elementsize; ptr < end; ptr += map->elementsize)
-    {
-        if (*ptr != '\0')
-        {
-            return idx;
-        }
-        else
-        {
-            ++idx;
-        }
-    }
-    return map->tablesize;
+    return map_next(map, idx);
 }

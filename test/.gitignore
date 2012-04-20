@@ -2,6 +2,8 @@ test-buf
 test-buf.log
 test-getline
 test-getline.log
+test-map
+test-map.log
 test-proto
 test-proto.log
 test-proxy
