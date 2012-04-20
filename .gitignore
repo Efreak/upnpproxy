@@ -4,6 +4,7 @@ Makefile
 .deps
 config.h
 config.h.in
+config.h.in~
 compile
 configure
 aclocal.m4

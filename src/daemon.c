@@ -1360,11 +1360,9 @@ static void close_conn(daemon_t daemon, conn_t* conn)
 
 static void daemon_lost_tunnel(tunnel_t* tunnel)
 {
-    daemon_t daemon;
     if (tunnel->remote)
     {
-        daemon = tunnel->source.remote.service->source->daemon;
-        if (tunnel->daemon_conn.state >= CONN_DEAD)
+        if (tunnel->daemon_conn.state > CONN_DEAD)
         {
             pkg_t pkg;
             pkg_close_tunnel(&pkg, tunnel->id, true);
@@ -1373,8 +1371,7 @@ static void daemon_lost_tunnel(tunnel_t* tunnel)
     }
     else
     {
-        daemon = tunnel->source.local.server->daemon;
-        if (tunnel->daemon_conn.state >= CONN_DEAD)
+        if (tunnel->daemon_conn.state > CONN_DEAD)
         {
             pkg_t pkg;
             pkg_close_tunnel(&pkg, tunnel->id, false);
@@ -2568,9 +2565,9 @@ bool load_config(daemon_t daemon)
         daemon->bind_tunnelport = safestrdup(bind_tunnelport);
     }
 
-    if (daemon->tunnel_port_first != tunnel_first_port ||
+    if (daemon->tunnel_port_first != (uint16_t)tunnel_first_port ||
         daemon->tunnel_port_first + daemon->tunnel_port_count + 1
-        != tunnel_last_port)
+        != (uint16_t)tunnel_last_port)
     {
         size_t nc = (tunnel_last_port - tunnel_first_port) + 1, i;
         if (tunnel_first_port > 0)

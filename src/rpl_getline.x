@@ -67,7 +67,7 @@ int rpl_getline(char** buf, size_t* buflen, FILE* fh)
             break;
         }
 
-        if (ret == size)
+        if ((size_t)ret == size)
         {
             size_t ns = size * 2;
             char* tmp;

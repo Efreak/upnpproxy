@@ -1003,7 +1003,7 @@ static bool header_value_list_contains(char* str, const char* token)
         {
             return false;
         }
-        if (tokenlen == (pos - start) &&
+        if (tokenlen == (size_t)(pos - start) &&
             strncasecmp(token, start, tokenlen) == 0)
         {
             return true;
@@ -1087,7 +1087,7 @@ static void header_value_list_remove(char* str, const char* token)
                 startpos = start;
             }
         }
-        if (tokenlen == (end - start) &&
+        if (tokenlen == (size_t)(end - start) &&
             strncasecmp(token, start, tokenlen) == 0)
         {
             memmove(startpos, pos, strlen(pos) + 1);
@@ -1157,7 +1157,7 @@ static bool header(http_proxy_t proxy, bool force)
             const char* p2 = strchr(proxy->sourcehost, ':');
             if (p1 == NULL && p2 != NULL)
             {
-                if (strlen(pos) == (p2 - proxy->sourcehost) &&
+                if (strlen(pos) == (size_t)(p2 - proxy->sourcehost) &&
                     memcmp(pos, proxy->sourcehost, p2 - proxy->sourcehost) == 0)
                 {
                     skip_port = true;

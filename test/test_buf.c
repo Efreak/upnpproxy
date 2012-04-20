@@ -108,7 +108,7 @@ static bool test1(size_t size, size_t step)
             }
             for (y = 0; y < x; ++y)
             {
-                if (tmp2[y] != done)
+                if ((size_t)tmp2[y] != done)
                 {
                     fprintf(stderr,
                             "test1:%lu:%lu buf_read(%lu)[%lu] != %u\n",
@@ -138,7 +138,7 @@ static bool test1(size_t size, size_t step)
         }
         for (y = 0; y < x; ++y)
         {
-            if (tmp2[y] != done)
+            if ((size_t)tmp2[y] != done)
             {
                 fprintf(stderr,
                         "test1:%lu:%lu buf_read(%lu)[%lu] != %u\n",
@@ -205,7 +205,7 @@ static bool test2(size_t size, size_t step)
             }
             for (y = 0; y < x; ++y)
             {
-                if (tmp2[y] != done)
+                if ((size_t)tmp2[y] != done)
                 {
                     fprintf(stderr,
                             "test2:%lu:%lu buf_read(%lu)[%lu] != %u\n",
@@ -235,7 +235,7 @@ static bool test2(size_t size, size_t step)
         }
         for (y = 0; y < x; ++y)
         {
-            if (tmp2[y] != done)
+            if ((size_t)tmp2[y] != done)
             {
                 fprintf(stderr,
                         "test2:%lu:%lu buf_read(%lu)[%lu] != %u\n",
