@@ -630,7 +630,7 @@ static char* find_config(void)
     }
     if (home != NULL && *home != '\0')
     {
-        if (asprintf(&tmp, "%s/.upnpproxy.conf", dir) == -1)
+        if (asprintf(&tmp, "%s/.upnpproxy.conf", home) == -1)
         {
             return NULL;
         }
