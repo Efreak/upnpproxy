@@ -51,7 +51,6 @@ int main(int argc, char** argv)
     return cnt == tot ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
-typedef struct _map_t* map_t;
 static uint32_t strptr_hash(const void* element)
 {
     const char* ptr = *((const char**)element);
