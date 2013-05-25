@@ -8,7 +8,7 @@ AM_INIT_AUTOMAKE([dist-bzip2 foreign color-tests parallel-tests])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
 AC_ISC_POSIX
-AM_PROG_CC_STDC
+AC_PROG_CC
 AM_PROG_CC_C_O
 AC_HEADER_STDC
 AC_C_CONST
@@ -78,5 +78,5 @@ fi
 AC_DEFINE_UNQUOTED([HAVE_UUID_GENERATE], [$have_uuid_generate], [define to 1 if uuid_generate is available])
 AC_DEFINE_UNQUOTED([HAVE_UUID_CREATE], [$have_uuid_create], [define to 1 if uuid_create is available])
 
-AM_CONFIG_HEADER([config.h])
+AC_CONFIG_HEADERS([config.h])
 AC_OUTPUT([Makefile src/Makefile test/Makefile doc/Makefile])

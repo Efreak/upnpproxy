@@ -1,8 +1,8 @@
 MAINTAINERCLEANFILES = Makefile.in
 
-INCLUDES = -I$(top_srcdir)/src -I$(top_srcdir) @DEFINES@ \
-		   -DSYSCONFDIR='"$(sysconfdir)"' \
-		   -DVERSION='"@VERSION@"'
+AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir) @DEFINES@ \
+		      -DSYSCONFDIR='"$(sysconfdir)"' \
+		      -DVERSION='"@VERSION@"'
 
 bin_PROGRAMS = upnpproxy ssdp_mon
 
