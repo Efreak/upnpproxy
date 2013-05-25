@@ -68,7 +68,7 @@ void bitmap_resize(bitmap_t bitmap, size_t newsize)
     {
         return;
     }
-    if (newsize > bitmap->size)
+    if (newsize > (bitmap->size * 32))
     {
         const size_t need = (newsize + 31) / 32;
         size_t ns = bitmap->size * 2;
@@ -90,11 +90,11 @@ void bitmap_resize(bitmap_t bitmap, size_t newsize)
         bitmap->size = ns;
         bitmap->data = tmp;
     }
+    bitmap->count = newsize;
     if (old < newsize)
     {
         bitmap_setrange(bitmap, old, newsize, bitmap->def);
     }
-    bitmap->count = newsize;
 }
 
 bool bitmap_get(bitmap_t bitmap, size_t index)
@@ -133,7 +133,7 @@ void bitmap_setrange(bitmap_t bitmap, size_t start, size_t end, bool value)
         si2++;
     }
     assert(start <= end);
-    assert(end <= bitmap->size);
+    assert(end <= bitmap->count);
 
     if (value)
     {
