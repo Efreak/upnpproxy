@@ -160,6 +160,7 @@ struct sockaddr* parse_addr(const char* addr, uint16_t port, socklen_t *addrlen,
             if (addrlen != NULL) *addrlen = sizeof(struct sockaddr_in);
             return data;
         }
+        free(data);
         if (allow_dnslookup)
         {
             struct hostent* host = gethostbyname2(addr, AF_INET6);

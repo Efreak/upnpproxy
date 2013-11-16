@@ -32,6 +32,7 @@
 #include "http_proxy.h"
 #include "buf.h"
 
+#include <sys/types.h>
 #include <string.h>
 #include <limits.h>
 #include <errno.h>
