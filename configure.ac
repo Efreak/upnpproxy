@@ -1,6 +1,6 @@
 # Copyright (C) 2011, Joel Klinghed
 
-AC_INIT([upnpproxy], [0.2], [the_jk@yahoo.com])
+AC_INIT([upnpproxy], [0.3], [the_jk@yahoo.com])
 AC_CONFIG_MACRO_DIR([m4])
 
 AM_INIT_AUTOMAKE([dist-bzip2 foreign color-tests parallel-tests])
